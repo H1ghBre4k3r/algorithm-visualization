@@ -46,6 +46,7 @@ export function exampleRequest(algorithm: AvailableAlgorithmId): AlgorithmReques
     algorithm === "selectionSort" ||
     algorithm === "shellSort" ||
     algorithm === "countingSort" ||
+    algorithm === "radixSort" ||
     algorithm === "mergesort" ||
     algorithm === "heapSort"
   ) {
@@ -66,9 +67,11 @@ export function exampleRequest(algorithm: AvailableAlgorithmId): AlgorithmReques
                   ? { type: "shellSort", value: {} }
                   : algorithm === "countingSort"
                     ? { type: "countingSort", value: {} }
-                    : algorithm === "mergesort"
-                      ? { type: "mergesort", value: {} }
-                      : { type: "heapSort", value: {} },
+                    : algorithm === "radixSort"
+                      ? { type: "radixSort", value: {} }
+                      : algorithm === "mergesort"
+                        ? { type: "mergesort", value: {} }
+                        : { type: "heapSort", value: {} },
     };
   }
 
@@ -135,6 +138,7 @@ export function customTemplate(algorithm: AvailableAlgorithmId): string {
     algorithm === "selectionSort" ||
     algorithm === "shellSort" ||
     algorithm === "countingSort" ||
+    algorithm === "radixSort" ||
     algorithm === "mergesort" ||
     algorithm === "heapSort"
       ? exampleSortInput

@@ -93,6 +93,13 @@ export const algorithms: AlgorithmCatalogItem[] = [
     summary: "Count integer buckets, then rebuild the array in order.",
   },
   {
+    id: "radixSort",
+    label: "Radix Sort",
+    category: "sorting",
+    status: "available",
+    summary: "Stabilize values by digit passes from least to most significant.",
+  },
+  {
     id: "mergesort",
     label: "Mergesort",
     category: "sorting",

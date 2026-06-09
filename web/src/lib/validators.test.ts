@@ -27,6 +27,13 @@ describe("parseSortInput", () => {
       value: { values: [4, 0, 2] },
     });
   });
+
+  it("routes radix sort custom input through the sort parser", () => {
+    expect(parseCustomInput("radixSort", '{"values":[40,2,11]}')).toEqual({
+      type: "sort",
+      value: { values: [40, 2, 11] },
+    });
+  });
 });
 
 describe("parseGraphInput", () => {

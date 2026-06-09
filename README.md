@@ -10,6 +10,7 @@ Browser-first algorithm visualization MVP with a Rust trace core, WASM bindings,
 - Selection Sort trace generation and animated bar visualization.
 - Shell Sort trace generation and animated bar visualization.
 - Counting Sort trace generation and animated bar visualization.
+- Radix Sort trace generation and animated bar visualization.
 - Mergesort trace generation and animated bar visualization.
 - Heap Sort trace generation and animated bar visualization.
 - Breadth-first search trace generation and animated graph traversal visualization.

@@ -44,6 +44,7 @@ export function drawTrace(canvas: HTMLCanvasElement, trace: Trace, step: number)
       trace.algorithm === "selectionSort" ||
       trace.algorithm === "shellSort" ||
       trace.algorithm === "countingSort" ||
+      trace.algorithm === "radixSort" ||
       trace.algorithm === "mergesort" ||
       trace.algorithm === "heapSort") &&
     trace.initialState.type === "array"

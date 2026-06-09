@@ -34,6 +34,10 @@ export function generateTraceFallback(request: AlgorithmRequest): Trace {
     return traceCountingSort(request.input.value);
   }
 
+  if (request.algorithm === "radixSort" && request.input.type === "sort") {
+    return traceRadixSort(request.input.value);
+  }
+
   if (request.algorithm === "mergesort" && request.input.type === "sort") {
     return traceMergesort(request.input.value);
   }
@@ -490,6 +494,95 @@ function traceCountingSort(input: SortInput): Trace {
     events,
     metadata: {
       algorithmName: "Counting Sort",
+      category: "Sorting",
+      inputSize: values.length,
+      eventCount: events.length,
+      resultSummary: `Sorted ${values.length} values.`,
+    },
+  };
+}
+
+function traceRadixSort(input: SortInput): Trace {
+  const initialValues = [...input.values];
+  const values = [...input.values];
+  const events: TraceEvent[] = [];
+
+  if (values.length > 128) {
+    throw new Error("Radix Sort input is capped at 128 values for interactive playback.");
+  }
+
+  const negativeValue = values.find((value) => value < 0);
+  if (negativeValue !== undefined) {
+    throw new Error(`Radix Sort requires non-negative integers; found ${negativeValue}.`);
+  }
+
+  const maxValue = Math.max(0, ...values);
+  if (maxValue > 512) {
+    throw new Error("Radix Sort supports values up to 512 for interactive playback.");
+  }
+
+  if (values.length > 0) {
+    for (let place = 1; place <= Math.max(1, maxValue); place *= 10) {
+      events.push({
+        type: "sortPartition",
+        range: [0, values.length - 1],
+        boundary: 0,
+        scanner: 0,
+        message: `Distribute values by the digit in place ${place}.`,
+      });
+
+      const buckets = Array.from({ length: 10 }, () => [] as number[]);
+      values.forEach((value, index) => {
+        const digit = Math.floor(value / place) % 10;
+        buckets[digit].push(value);
+        events.push({
+          type: "sortCompare",
+          indices: [index, index],
+          message: `Place value ${value} into digit bucket ${digit}.`,
+        });
+      });
+
+      let writeIndex = 0;
+      buckets.forEach((bucket, digit) => {
+        if (bucket.length === 0) {
+          return;
+        }
+
+        events.push({
+          type: "sortPartition",
+          range: [writeIndex, values.length - 1],
+          boundary: writeIndex,
+          scanner: writeIndex,
+          message: `Collect digit bucket ${digit}.`,
+        });
+
+        for (const value of bucket) {
+          values[writeIndex] = value;
+          events.push({
+            type: "sortSwap",
+            indices: [writeIndex, writeIndex],
+            values: [...values],
+            message: `Write ${value} from bucket ${digit} to index ${writeIndex}.`,
+          });
+          writeIndex += 1;
+        }
+      });
+    }
+
+    events.push({
+      type: "sortMarkSorted",
+      indices: values.map((_, index) => index),
+      message: "All digit passes complete; values are sorted.",
+    });
+  }
+
+  return {
+    algorithm: "radixSort",
+    initialState: { type: "array", values: initialValues },
+    finalState: { type: "array", values },
+    events,
+    metadata: {
+      algorithmName: "Radix Sort",
       category: "Sorting",
       inputSize: values.length,
       eventCount: events.length,
