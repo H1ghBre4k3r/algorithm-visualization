@@ -58,6 +58,13 @@ export const algorithms: AlgorithmCatalogItem[] = [
     summary: "Partition an array around pivots until every range is ordered.",
   },
   {
+    id: "insertionSort",
+    label: "Insertion Sort",
+    category: "sorting",
+    status: "available",
+    summary: "Build a sorted prefix by inserting each value into place.",
+  },
+  {
     id: "bfs",
     label: "Breadth-First Search",
     category: "graph",

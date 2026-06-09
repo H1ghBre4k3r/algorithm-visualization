@@ -37,7 +37,10 @@ export function drawTrace(canvas: HTMLCanvasElement, trace: Trace, step: number)
   context.setTransform(dpr, 0, 0, dpr, 0, 0);
   drawBackground(context, width, height);
 
-  if (trace.algorithm === "quicksort" && trace.initialState.type === "array") {
+  if (
+    (trace.algorithm === "quicksort" || trace.algorithm === "insertionSort") &&
+    trace.initialState.type === "array"
+  ) {
     drawSortTrace(context, width, height, trace, step);
   }
 

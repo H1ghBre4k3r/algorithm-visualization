@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "camelCase")]
 pub enum AlgorithmId {
     Quicksort,
+    InsertionSort,
     Bfs,
     Dfs,
     Dijkstra,
@@ -45,6 +46,7 @@ pub enum InputData {
 #[serde(tag = "type", content = "value", rename_all = "camelCase")]
 pub enum AlgorithmOptions {
     Quicksort(QuicksortOptions),
+    InsertionSort(InsertionSortOptions),
     Bfs(BfsOptions),
     Dfs(DfsOptions),
     Dijkstra(DijkstraOptions),
@@ -63,6 +65,10 @@ pub struct QuicksortOptions {
 fn default_pivot_strategy() -> String {
     "last".to_string()
 }
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct InsertionSortOptions {}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -341,6 +347,7 @@ impl std::error::Error for AlgorithmError {}
 pub fn generate_trace(request: AlgorithmRequest) -> Result<Trace, AlgorithmError> {
     match (request.algorithm, request.input) {
         (AlgorithmId::Quicksort, InputData::Sort(input)) => trace_quicksort(input),
+        (AlgorithmId::InsertionSort, InputData::Sort(input)) => trace_insertion_sort(input),
         (AlgorithmId::Bfs, InputData::Graph(input)) => {
             let stop_at_target = match request.options {
                 Some(AlgorithmOptions::Bfs(options)) => options.stop_at_target,
@@ -367,6 +374,9 @@ pub fn generate_trace(request: AlgorithmRequest) -> Result<Trace, AlgorithmError
         (AlgorithmId::Levenshtein, InputData::Sequence(input)) => trace_levenshtein(input),
         (AlgorithmId::Quicksort, _) => Err(AlgorithmError::new(
             "Quicksort requires sort input with a values array.",
+        )),
+        (AlgorithmId::InsertionSort, _) => Err(AlgorithmError::new(
+            "Insertion Sort requires sort input with a values array.",
         )),
         (AlgorithmId::Bfs, _) => Err(AlgorithmError::new(
             "Breadth-first search requires graph input with nodes, edges, source, and target.",
@@ -400,6 +410,16 @@ pub fn example_request(algorithm: AlgorithmId) -> AlgorithmRequest {
             options: Some(AlgorithmOptions::Quicksort(QuicksortOptions {
                 pivot_strategy: default_pivot_strategy(),
             })),
+        },
+        AlgorithmId::InsertionSort => AlgorithmRequest {
+            algorithm,
+            input_mode: InputMode::Example,
+            input: InputData::Sort(SortInput {
+                values: vec![42, 12, 77, 18, 93, 31, 64, 5, 56, 29],
+            }),
+            options: Some(AlgorithmOptions::InsertionSort(
+                InsertionSortOptions::default(),
+            )),
         },
         AlgorithmId::Bfs => AlgorithmRequest {
             algorithm,
@@ -482,6 +502,81 @@ pub fn trace_quicksort(input: SortInput) -> Result<Trace, AlgorithmError> {
 
     Ok(Trace {
         algorithm: AlgorithmId::Quicksort,
+        initial_state: VisualizationState::Array {
+            values: initial_values,
+        },
+        final_state: VisualizationState::Array { values },
+        events,
+        metadata,
+    })
+}
+
+pub fn trace_insertion_sort(input: SortInput) -> Result<Trace, AlgorithmError> {
+    if input.values.len() > 128 {
+        return Err(AlgorithmError::new(
+            "Insertion Sort input is capped at 128 values for interactive playback.",
+        ));
+    }
+
+    let initial_values = input.values.clone();
+    let mut values = input.values;
+    let mut events = Vec::new();
+
+    if !values.is_empty() {
+        events.push(TraceEvent::SortMarkSorted {
+            indices: vec![0],
+            message: "Start with the first value as the sorted prefix.".to_string(),
+        });
+    }
+
+    for index in 1..values.len() {
+        let mut cursor = index;
+        events.push(TraceEvent::SortPartition {
+            range: [0, index],
+            boundary: index,
+            scanner: index,
+            message: format!("Insert value {} into the sorted prefix.", values[index]),
+        });
+
+        while cursor > 0 {
+            events.push(TraceEvent::SortCompare {
+                indices: [cursor - 1, cursor],
+                message: format!(
+                    "Compare {} and {} around insertion cursor {cursor}.",
+                    values[cursor - 1],
+                    values[cursor]
+                ),
+            });
+
+            if values[cursor - 1] <= values[cursor] {
+                break;
+            }
+
+            values.swap(cursor - 1, cursor);
+            events.push(TraceEvent::SortSwap {
+                indices: [cursor - 1, cursor],
+                values: values.clone(),
+                message: format!("Shift {} left into the sorted prefix.", values[cursor - 1]),
+            });
+            cursor -= 1;
+        }
+
+        events.push(TraceEvent::SortMarkSorted {
+            indices: (0..=index).collect(),
+            message: format!("Positions 0 through {index} are sorted."),
+        });
+    }
+
+    let metadata = TraceMetadata {
+        algorithm_name: "Insertion Sort".to_string(),
+        category: "Sorting".to_string(),
+        input_size: values.len(),
+        event_count: events.len(),
+        result_summary: format!("Sorted {} values.", values.len()),
+    };
+
+    Ok(Trace {
+        algorithm: AlgorithmId::InsertionSort,
         initial_state: VisualizationState::Array {
             values: initial_values,
         },
@@ -1701,6 +1796,34 @@ mod tests {
     }
 
     #[test]
+    fn insertion_sort_trace_sorts_values() {
+        let trace = trace_insertion_sort(SortInput {
+            values: vec![9, 3, 7, 1, 4],
+        })
+        .expect("trace");
+
+        assert_eq!(
+            trace.final_state,
+            VisualizationState::Array {
+                values: vec![1, 3, 4, 7, 9]
+            }
+        );
+        assert!(
+            trace
+                .events
+                .iter()
+                .any(|event| matches!(event, TraceEvent::SortCompare { .. }))
+        );
+        assert!(
+            trace
+                .events
+                .iter()
+                .any(|event| matches!(event, TraceEvent::SortSwap { .. }))
+        );
+        assert_valid_sort_trace(&trace);
+    }
+
+    #[test]
     fn bfs_trace_finds_shortest_unweighted_path() {
         let trace = trace_bfs(example_graph(), true).expect("trace");
 
@@ -1904,6 +2027,7 @@ mod tests {
     fn example_requests_generate_valid_traces() {
         for algorithm in [
             AlgorithmId::Quicksort,
+            AlgorithmId::InsertionSort,
             AlgorithmId::Bfs,
             AlgorithmId::Dfs,
             AlgorithmId::Dijkstra,
@@ -1913,7 +2037,9 @@ mod tests {
         ] {
             let trace = generate_trace(example_request(algorithm)).expect("trace");
             match algorithm {
-                AlgorithmId::Quicksort => assert_valid_sort_trace(&trace),
+                AlgorithmId::Quicksort | AlgorithmId::InsertionSort => {
+                    assert_valid_sort_trace(&trace)
+                }
                 AlgorithmId::Bfs
                 | AlgorithmId::Dfs
                 | AlgorithmId::Dijkstra
@@ -1927,7 +2053,10 @@ mod tests {
         let VisualizationState::Array { values } = &trace.initial_state else {
             panic!("sort trace must start with an array state");
         };
-        assert_eq!(trace.algorithm, AlgorithmId::Quicksort);
+        assert!(matches!(
+            trace.algorithm,
+            AlgorithmId::Quicksort | AlgorithmId::InsertionSort
+        ));
         assert_eq!(trace.metadata.event_count, trace.events.len());
 
         let len = values.len();

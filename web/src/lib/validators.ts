@@ -16,7 +16,7 @@ export class InputValidationError extends Error {
 }
 
 export function parseCustomInput(algorithm: AvailableAlgorithmId, raw: string): InputData {
-  if (algorithm === "quicksort") {
+  if (algorithm === "quicksort" || algorithm === "insertionSort") {
     return { type: "sort", value: parseSortInput(raw) };
   }
   if (algorithm === "kmp") {
@@ -33,10 +33,10 @@ export function parseSortInput(raw: string): SortInput {
   const values = Array.isArray(parsed) ? parsed : readRecord(parsed).values;
 
   if (!Array.isArray(values)) {
-    throw new InputValidationError("Quicksort input must be an array or an object with a values array.");
+    throw new InputValidationError("Sort input must be an array or an object with a values array.");
   }
   if (values.length > 128) {
-    throw new InputValidationError("Quicksort supports up to 128 values.");
+    throw new InputValidationError("Sorting visualizations support up to 128 values.");
   }
 
   return {

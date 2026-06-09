@@ -14,6 +14,10 @@ export function generateTraceFallback(request: AlgorithmRequest): Trace {
     return traceQuicksort(request.input.value);
   }
 
+  if (request.algorithm === "insertionSort" && request.input.type === "sort") {
+    return traceInsertionSort(request.input.value);
+  }
+
   if (request.algorithm === "dijkstra" && request.input.type === "graph") {
     const stopAtTarget =
       request.options?.type === "dijkstra" ? request.options.value.stopAtTarget : true;
@@ -70,6 +74,76 @@ function traceQuicksort(input: SortInput): Trace {
     events,
     metadata: {
       algorithmName: "Quicksort",
+      category: "Sorting",
+      inputSize: values.length,
+      eventCount: events.length,
+      resultSummary: `Sorted ${values.length} values.`,
+    },
+  };
+}
+
+function traceInsertionSort(input: SortInput): Trace {
+  const initialValues = [...input.values];
+  const values = [...input.values];
+  const events: TraceEvent[] = [];
+
+  if (values.length > 128) {
+    throw new Error("Insertion Sort input is capped at 128 values for interactive playback.");
+  }
+
+  if (values.length > 0) {
+    events.push({
+      type: "sortMarkSorted",
+      indices: [0],
+      message: "Start with the first value as the sorted prefix.",
+    });
+  }
+
+  for (let index = 1; index < values.length; index += 1) {
+    let cursor = index;
+    events.push({
+      type: "sortPartition",
+      range: [0, index],
+      boundary: index,
+      scanner: index,
+      message: `Insert value ${values[index]} into the sorted prefix.`,
+    });
+
+    while (cursor > 0) {
+      events.push({
+        type: "sortCompare",
+        indices: [cursor - 1, cursor],
+        message: `Compare ${values[cursor - 1]} and ${values[cursor]} around insertion cursor ${cursor}.`,
+      });
+
+      if (values[cursor - 1] <= values[cursor]) {
+        break;
+      }
+
+      swap(values, cursor - 1, cursor);
+      events.push({
+        type: "sortSwap",
+        indices: [cursor - 1, cursor],
+        values: [...values],
+        message: `Shift ${values[cursor - 1]} left into the sorted prefix.`,
+      });
+      cursor -= 1;
+    }
+
+    events.push({
+      type: "sortMarkSorted",
+      indices: Array.from({ length: index + 1 }, (_, sortedIndex) => sortedIndex),
+      message: `Positions 0 through ${index} are sorted.`,
+    });
+  }
+
+  return {
+    algorithm: "insertionSort",
+    initialState: { type: "array", values: initialValues },
+    finalState: { type: "array", values },
+    events,
+    metadata: {
+      algorithmName: "Insertion Sort",
       category: "Sorting",
       inputSize: values.length,
       eventCount: events.length,

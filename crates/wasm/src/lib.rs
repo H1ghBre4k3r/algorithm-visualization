@@ -16,6 +16,7 @@ pub fn generate_trace_from_request(request: JsValue) -> Result<JsValue, JsValue>
 pub fn example_request_for(algorithm: &str) -> Result<JsValue, JsValue> {
     let algorithm = match algorithm {
         "quicksort" => AlgorithmId::Quicksort,
+        "insertionSort" => AlgorithmId::InsertionSort,
         "bfs" => AlgorithmId::Bfs,
         "dfs" => AlgorithmId::Dfs,
         "dijkstra" => AlgorithmId::Dijkstra,

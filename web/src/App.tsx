@@ -51,6 +51,7 @@ export default function App() {
   const [randomEditDistance, setRandomEditDistance] = useState<SequenceInput>(() => randomEditDistanceInput(14));
   const [customJson, setCustomJson] = useState<Record<AvailableAlgorithmId, string>>({
     quicksort: customTemplate("quicksort"),
+    insertionSort: customTemplate("insertionSort"),
     bfs: customTemplate("bfs"),
     dfs: customTemplate("dfs"),
     dijkstra: customTemplate("dijkstra"),
@@ -135,7 +136,7 @@ export default function App() {
   const canPlay = Boolean(trace && trace.events.length > 0 && step < trace.events.length);
 
   function refreshRandomInput() {
-    if (algorithm === "quicksort") {
+    if (isSortAlgorithm(algorithm)) {
       setRandomSort(randomSortInput(sortSize));
     } else if (algorithm === "kmp") {
       setRandomSequence(randomSequenceInput(sequenceSize));
@@ -258,7 +259,7 @@ export default function App() {
                   <Shuffle size={18} />
                 </button>
               </div>
-              {algorithm === "quicksort" && (
+              {isSortAlgorithm(algorithm) && (
                 <RangeControl
                   label="Count"
                   min={6}
@@ -416,7 +417,7 @@ function buildRequest(
     };
   }
 
-  if (algorithm === "quicksort") {
+  if (isSortAlgorithm(algorithm)) {
     return {
       algorithm,
       inputMode,
@@ -460,6 +461,9 @@ function optionsForAlgorithm(algorithm: AvailableAlgorithmId): AlgorithmRequest[
   if (algorithm === "quicksort") {
     return { type: "quicksort", value: { pivotStrategy: "last" } };
   }
+  if (algorithm === "insertionSort") {
+    return { type: "insertionSort", value: {} };
+  }
   if (algorithm === "kmp") {
     return { type: "kmp", value: {} };
   }
@@ -479,9 +483,13 @@ function optionsForAlgorithm(algorithm: AvailableAlgorithmId): AlgorithmRequest[
 }
 
 function randomControlLabel(algorithm: AvailableAlgorithmId) {
-  if (algorithm === "quicksort") return "Values";
+  if (isSortAlgorithm(algorithm)) return "Values";
   if (algorithm === "kmp" || algorithm === "levenshtein") return "Text";
   return "Nodes";
+}
+
+function isSortAlgorithm(algorithm: AvailableAlgorithmId) {
+  return algorithm === "quicksort" || algorithm === "insertionSort";
 }
 
 function isGraphAlgorithm(algorithm: AvailableAlgorithmId) {

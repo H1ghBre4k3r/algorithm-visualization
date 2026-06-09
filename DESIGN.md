@@ -31,6 +31,7 @@ Reference: https://impeccable.style
 - Sorting:
   - Comparison: warm amber.
   - Pivot: violet.
+  - Insertion boundary: violet range wash.
   - Swap: red.
   - Fixed/sorted: green.
 - Graph:

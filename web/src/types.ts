@@ -1,5 +1,6 @@
 export type AvailableAlgorithmId =
   | "quicksort"
+  | "insertionSort"
   | "bfs"
   | "dfs"
   | "dijkstra"
@@ -29,6 +30,7 @@ export type InputData =
 
 export type AlgorithmOptions =
   | { type: "quicksort"; value: QuicksortOptions }
+  | { type: "insertionSort"; value: InsertionSortOptions }
   | { type: "bfs"; value: BfsOptions }
   | { type: "dfs"; value: DfsOptions }
   | { type: "dijkstra"; value: DijkstraOptions }
@@ -39,6 +41,8 @@ export type AlgorithmOptions =
 export interface QuicksortOptions {
   pivotStrategy: "last";
 }
+
+export type InsertionSortOptions = Record<string, never>;
 
 export interface BfsOptions {
   stopAtTarget: boolean;
