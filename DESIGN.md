@@ -36,6 +36,7 @@ Reference: https://impeccable.style
   - Shell gap pass: violet range wash with amber gapped comparisons.
   - Counting rebuild: violet write range with green reconstructed prefix.
   - Radix digit pass: violet range wash with amber bucket reads.
+  - Bucket distribution: violet range wash with amber assignments and green collection.
   - Bubble pass fixed tail: green.
   - Merge range: violet range wash with amber comparisons.
   - Heap range: violet range wash with green fixed tail.

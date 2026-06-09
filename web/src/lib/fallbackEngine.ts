@@ -38,6 +38,10 @@ export function generateTraceFallback(request: AlgorithmRequest): Trace {
     return traceRadixSort(request.input.value);
   }
 
+  if (request.algorithm === "bucketSort" && request.input.type === "sort") {
+    return traceBucketSort(request.input.value);
+  }
+
   if (request.algorithm === "mergesort" && request.input.type === "sort") {
     return traceMergesort(request.input.value);
   }
@@ -583,6 +587,98 @@ function traceRadixSort(input: SortInput): Trace {
     events,
     metadata: {
       algorithmName: "Radix Sort",
+      category: "Sorting",
+      inputSize: values.length,
+      eventCount: events.length,
+      resultSummary: `Sorted ${values.length} values.`,
+    },
+  };
+}
+
+function traceBucketSort(input: SortInput): Trace {
+  const initialValues = [...input.values];
+  const values = [...input.values];
+  const events: TraceEvent[] = [];
+
+  if (values.length > 128) {
+    throw new Error("Bucket Sort input is capped at 128 values for interactive playback.");
+  }
+
+  const negativeValue = values.find((value) => value < 0);
+  if (negativeValue !== undefined) {
+    throw new Error(`Bucket Sort requires non-negative integers; found ${negativeValue}.`);
+  }
+
+  const maxValue = Math.max(0, ...values);
+  if (maxValue > 512) {
+    throw new Error("Bucket Sort supports values up to 512 for interactive playback.");
+  }
+
+  if (values.length > 0) {
+    const bucketCount = Math.min(10, Math.max(1, Math.ceil(Math.sqrt(values.length))));
+    events.push({
+      type: "sortPartition",
+      range: [0, values.length - 1],
+      boundary: 0,
+      scanner: 0,
+      message: `Split values into ${bucketCount} bucket ranges.`,
+    });
+
+    const buckets = Array.from({ length: bucketCount }, () => [] as number[]);
+    values.forEach((value, index) => {
+      const bucketIndex = Math.min(
+        bucketCount - 1,
+        Math.floor((value * bucketCount) / (maxValue + 1)),
+      );
+      buckets[bucketIndex].push(value);
+      events.push({
+        type: "sortCompare",
+        indices: [index, index],
+        message: `Place value ${value} into bucket ${bucketIndex}.`,
+      });
+    });
+
+    let writeIndex = 0;
+    buckets.forEach((bucket, bucketIndex) => {
+      if (bucket.length === 0) {
+        return;
+      }
+
+      bucket.sort((left, right) => left - right);
+      events.push({
+        type: "sortPartition",
+        range: [writeIndex, values.length - 1],
+        boundary: writeIndex,
+        scanner: writeIndex,
+        message: `Sort and collect bucket ${bucketIndex}.`,
+      });
+
+      for (const value of bucket) {
+        values[writeIndex] = value;
+        events.push({
+          type: "sortSwap",
+          indices: [writeIndex, writeIndex],
+          values: [...values],
+          message: `Write ${value} from bucket ${bucketIndex} to index ${writeIndex}.`,
+        });
+        writeIndex += 1;
+      }
+    });
+
+    events.push({
+      type: "sortMarkSorted",
+      indices: values.map((_, index) => index),
+      message: "All bucket ranges are collected in sorted order.",
+    });
+  }
+
+  return {
+    algorithm: "bucketSort",
+    initialState: { type: "array", values: initialValues },
+    finalState: { type: "array", values },
+    events,
+    metadata: {
+      algorithmName: "Bucket Sort",
       category: "Sorting",
       inputSize: values.length,
       eventCount: events.length,

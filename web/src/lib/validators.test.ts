@@ -34,6 +34,13 @@ describe("parseSortInput", () => {
       value: { values: [40, 2, 11] },
     });
   });
+
+  it("routes bucket sort custom input through the sort parser", () => {
+    expect(parseCustomInput("bucketSort", '{"values":[9,1,4]}')).toEqual({
+      type: "sort",
+      value: { values: [9, 1, 4] },
+    });
+  });
 });
 
 describe("parseGraphInput", () => {

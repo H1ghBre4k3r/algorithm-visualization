@@ -100,6 +100,13 @@ export const algorithms: AlgorithmCatalogItem[] = [
     summary: "Stabilize values by digit passes from least to most significant.",
   },
   {
+    id: "bucketSort",
+    label: "Bucket Sort",
+    category: "sorting",
+    status: "available",
+    summary: "Distribute values into ranges, sort each bucket, then collect.",
+  },
+  {
     id: "mergesort",
     label: "Mergesort",
     category: "sorting",

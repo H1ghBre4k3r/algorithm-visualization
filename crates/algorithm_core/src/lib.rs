@@ -13,6 +13,7 @@ pub enum AlgorithmId {
     ShellSort,
     CountingSort,
     RadixSort,
+    BucketSort,
     Mergesort,
     HeapSort,
     Bfs,
@@ -62,6 +63,7 @@ pub enum AlgorithmOptions {
     ShellSort(ShellSortOptions),
     CountingSort(CountingSortOptions),
     RadixSort(RadixSortOptions),
+    BucketSort(BucketSortOptions),
     Mergesort(MergesortOptions),
     HeapSort(HeapSortOptions),
     Bfs(BfsOptions),
@@ -109,6 +111,10 @@ pub struct CountingSortOptions {}
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct RadixSortOptions {}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct BucketSortOptions {}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
@@ -420,6 +426,7 @@ pub fn generate_trace(request: AlgorithmRequest) -> Result<Trace, AlgorithmError
         (AlgorithmId::ShellSort, InputData::Sort(input)) => trace_shell_sort(input),
         (AlgorithmId::CountingSort, InputData::Sort(input)) => trace_counting_sort(input),
         (AlgorithmId::RadixSort, InputData::Sort(input)) => trace_radix_sort(input),
+        (AlgorithmId::BucketSort, InputData::Sort(input)) => trace_bucket_sort(input),
         (AlgorithmId::Mergesort, InputData::Sort(input)) => trace_mergesort(input),
         (AlgorithmId::HeapSort, InputData::Sort(input)) => trace_heap_sort(input),
         (AlgorithmId::Bfs, InputData::Graph(input)) => {
@@ -475,6 +482,9 @@ pub fn generate_trace(request: AlgorithmRequest) -> Result<Trace, AlgorithmError
         )),
         (AlgorithmId::RadixSort, _) => Err(AlgorithmError::new(
             "Radix Sort requires sort input with a non-negative values array.",
+        )),
+        (AlgorithmId::BucketSort, _) => Err(AlgorithmError::new(
+            "Bucket Sort requires sort input with a non-negative values array.",
         )),
         (AlgorithmId::Mergesort, _) => Err(AlgorithmError::new(
             "Mergesort requires sort input with a values array.",
@@ -577,6 +587,14 @@ pub fn example_request(algorithm: AlgorithmId) -> AlgorithmRequest {
                 values: vec![42, 12, 77, 18, 93, 31, 64, 5, 56, 29],
             }),
             options: Some(AlgorithmOptions::RadixSort(RadixSortOptions::default())),
+        },
+        AlgorithmId::BucketSort => AlgorithmRequest {
+            algorithm,
+            input_mode: InputMode::Example,
+            input: InputData::Sort(SortInput {
+                values: vec![42, 12, 77, 18, 93, 31, 64, 5, 56, 29],
+            }),
+            options: Some(AlgorithmOptions::BucketSort(BucketSortOptions::default())),
         },
         AlgorithmId::Mergesort => AlgorithmRequest {
             algorithm,
@@ -1207,6 +1225,101 @@ pub fn trace_radix_sort(input: SortInput) -> Result<Trace, AlgorithmError> {
 
     Ok(Trace {
         algorithm: AlgorithmId::RadixSort,
+        initial_state: VisualizationState::Array {
+            values: initial_values,
+        },
+        final_state: VisualizationState::Array { values },
+        events,
+        metadata,
+    })
+}
+
+pub fn trace_bucket_sort(input: SortInput) -> Result<Trace, AlgorithmError> {
+    if input.values.len() > 128 {
+        return Err(AlgorithmError::new(
+            "Bucket Sort input is capped at 128 values for interactive playback.",
+        ));
+    }
+    if let Some(value) = input.values.iter().find(|value| **value < 0) {
+        return Err(AlgorithmError::new(format!(
+            "Bucket Sort requires non-negative integers; found {value}."
+        )));
+    }
+
+    let initial_values = input.values.clone();
+    let mut values = input.values;
+    let mut events = Vec::new();
+    let max_value = values.iter().copied().max().unwrap_or(0);
+    if max_value > 512 {
+        return Err(AlgorithmError::new(
+            "Bucket Sort supports values up to 512 for interactive playback.",
+        ));
+    }
+
+    let len = values.len();
+    if len > 0 {
+        let bucket_count = (len as f64).sqrt().ceil().clamp(1.0, 10.0) as usize;
+        events.push(TraceEvent::SortPartition {
+            range: [0, len - 1],
+            boundary: 0,
+            scanner: 0,
+            message: format!("Split values into {bucket_count} bucket ranges."),
+        });
+
+        let mut buckets = vec![Vec::<i32>::new(); bucket_count];
+        for (index, value) in values.iter().enumerate() {
+            let bucket_index =
+                ((*value as usize * bucket_count) / (max_value as usize + 1)).min(bucket_count - 1);
+            buckets[bucket_index].push(*value);
+            events.push(TraceEvent::SortCompare {
+                indices: [index, index],
+                message: format!("Place value {value} into bucket {bucket_index}."),
+            });
+        }
+
+        let mut write_index = 0;
+        for (bucket_index, bucket) in buckets.iter_mut().enumerate() {
+            if bucket.is_empty() {
+                continue;
+            }
+
+            bucket.sort();
+            events.push(TraceEvent::SortPartition {
+                range: [write_index, len - 1],
+                boundary: write_index,
+                scanner: write_index,
+                message: format!("Sort and collect bucket {bucket_index}."),
+            });
+
+            for value in bucket.iter() {
+                values[write_index] = *value;
+                events.push(TraceEvent::SortSwap {
+                    indices: [write_index, write_index],
+                    values: values.clone(),
+                    message: format!(
+                        "Write {value} from bucket {bucket_index} to index {write_index}."
+                    ),
+                });
+                write_index += 1;
+            }
+        }
+
+        events.push(TraceEvent::SortMarkSorted {
+            indices: (0..len).collect(),
+            message: "All bucket ranges are collected in sorted order.".to_string(),
+        });
+    }
+
+    let metadata = TraceMetadata {
+        algorithm_name: "Bucket Sort".to_string(),
+        category: "Sorting".to_string(),
+        input_size: values.len(),
+        event_count: events.len(),
+        result_summary: format!("Sorted {} values.", values.len()),
+    };
+
+    Ok(Trace {
+        algorithm: AlgorithmId::BucketSort,
         initial_state: VisualizationState::Array {
             values: initial_values,
         },
@@ -3413,6 +3526,56 @@ mod tests {
     }
 
     #[test]
+    fn bucket_sort_trace_sorts_values() {
+        let trace = trace_bucket_sort(SortInput {
+            values: vec![42, 3, 17, 1, 40, 3],
+        })
+        .expect("trace");
+
+        assert_eq!(
+            trace.final_state,
+            VisualizationState::Array {
+                values: vec![1, 3, 3, 17, 40, 42]
+            }
+        );
+        assert!(
+            trace
+                .events
+                .iter()
+                .any(|event| matches!(event, TraceEvent::SortCompare { .. }))
+        );
+        assert!(
+            trace
+                .events
+                .iter()
+                .any(|event| matches!(event, TraceEvent::SortSwap { .. }))
+        );
+        assert_valid_sort_trace(&trace);
+    }
+
+    #[test]
+    fn bucket_sort_handles_empty_input() {
+        let trace = trace_bucket_sort(SortInput { values: vec![] }).expect("trace");
+
+        assert_eq!(
+            trace.final_state,
+            VisualizationState::Array { values: vec![] }
+        );
+        assert!(trace.events.is_empty());
+        assert_valid_sort_trace(&trace);
+    }
+
+    #[test]
+    fn bucket_sort_rejects_negative_values() {
+        let error = trace_bucket_sort(SortInput {
+            values: vec![3, -1, 2],
+        })
+        .expect_err("invalid bucket sort input");
+
+        assert!(error.message().contains("non-negative"));
+    }
+
+    #[test]
     fn mergesort_trace_sorts_values() {
         let trace = trace_mergesort(SortInput {
             values: vec![9, 3, 7, 1, 4],
@@ -3776,6 +3939,7 @@ mod tests {
             AlgorithmId::ShellSort,
             AlgorithmId::CountingSort,
             AlgorithmId::RadixSort,
+            AlgorithmId::BucketSort,
             AlgorithmId::Mergesort,
             AlgorithmId::HeapSort,
             AlgorithmId::Bfs,
@@ -3797,6 +3961,7 @@ mod tests {
                 | AlgorithmId::ShellSort
                 | AlgorithmId::CountingSort
                 | AlgorithmId::RadixSort
+                | AlgorithmId::BucketSort
                 | AlgorithmId::Mergesort
                 | AlgorithmId::HeapSort => assert_valid_sort_trace(&trace),
                 AlgorithmId::Bfs
@@ -3824,6 +3989,7 @@ mod tests {
                 | AlgorithmId::ShellSort
                 | AlgorithmId::CountingSort
                 | AlgorithmId::RadixSort
+                | AlgorithmId::BucketSort
                 | AlgorithmId::Mergesort
                 | AlgorithmId::HeapSort
         ));
