@@ -14,6 +14,7 @@ pub enum AlgorithmId {
     CountingSort,
     RadixSort,
     BucketSort,
+    CombSort,
     Mergesort,
     HeapSort,
     Bfs,
@@ -64,6 +65,7 @@ pub enum AlgorithmOptions {
     CountingSort(CountingSortOptions),
     RadixSort(RadixSortOptions),
     BucketSort(BucketSortOptions),
+    CombSort(CombSortOptions),
     Mergesort(MergesortOptions),
     HeapSort(HeapSortOptions),
     Bfs(BfsOptions),
@@ -115,6 +117,10 @@ pub struct RadixSortOptions {}
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct BucketSortOptions {}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct CombSortOptions {}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
@@ -427,6 +433,7 @@ pub fn generate_trace(request: AlgorithmRequest) -> Result<Trace, AlgorithmError
         (AlgorithmId::CountingSort, InputData::Sort(input)) => trace_counting_sort(input),
         (AlgorithmId::RadixSort, InputData::Sort(input)) => trace_radix_sort(input),
         (AlgorithmId::BucketSort, InputData::Sort(input)) => trace_bucket_sort(input),
+        (AlgorithmId::CombSort, InputData::Sort(input)) => trace_comb_sort(input),
         (AlgorithmId::Mergesort, InputData::Sort(input)) => trace_mergesort(input),
         (AlgorithmId::HeapSort, InputData::Sort(input)) => trace_heap_sort(input),
         (AlgorithmId::Bfs, InputData::Graph(input)) => {
@@ -485,6 +492,9 @@ pub fn generate_trace(request: AlgorithmRequest) -> Result<Trace, AlgorithmError
         )),
         (AlgorithmId::BucketSort, _) => Err(AlgorithmError::new(
             "Bucket Sort requires sort input with a non-negative values array.",
+        )),
+        (AlgorithmId::CombSort, _) => Err(AlgorithmError::new(
+            "Comb Sort requires sort input with a values array.",
         )),
         (AlgorithmId::Mergesort, _) => Err(AlgorithmError::new(
             "Mergesort requires sort input with a values array.",
@@ -595,6 +605,14 @@ pub fn example_request(algorithm: AlgorithmId) -> AlgorithmRequest {
                 values: vec![42, 12, 77, 18, 93, 31, 64, 5, 56, 29],
             }),
             options: Some(AlgorithmOptions::BucketSort(BucketSortOptions::default())),
+        },
+        AlgorithmId::CombSort => AlgorithmRequest {
+            algorithm,
+            input_mode: InputMode::Example,
+            input: InputData::Sort(SortInput {
+                values: vec![42, 12, 77, 18, 93, 31, 64, 5, 56, 29],
+            }),
+            options: Some(AlgorithmOptions::CombSort(CombSortOptions::default())),
         },
         AlgorithmId::Mergesort => AlgorithmRequest {
             algorithm,
@@ -1320,6 +1338,88 @@ pub fn trace_bucket_sort(input: SortInput) -> Result<Trace, AlgorithmError> {
 
     Ok(Trace {
         algorithm: AlgorithmId::BucketSort,
+        initial_state: VisualizationState::Array {
+            values: initial_values,
+        },
+        final_state: VisualizationState::Array { values },
+        events,
+        metadata,
+    })
+}
+
+pub fn trace_comb_sort(input: SortInput) -> Result<Trace, AlgorithmError> {
+    if input.values.len() > 128 {
+        return Err(AlgorithmError::new(
+            "Comb Sort input is capped at 128 values for interactive playback.",
+        ));
+    }
+
+    let initial_values = input.values.clone();
+    let mut values = input.values;
+    let mut events = Vec::new();
+    let len = values.len();
+
+    if len > 1 {
+        let mut gap = len;
+        let mut swapped = true;
+
+        while gap > 1 || swapped {
+            gap = ((gap * 10) / 13).max(1);
+            swapped = false;
+
+            events.push(TraceEvent::SortPartition {
+                range: [0, len - 1],
+                boundary: gap,
+                scanner: 0,
+                message: format!("Scan values with gap {gap}."),
+            });
+
+            let mut index = 0;
+            while index + gap < len {
+                let paired = index + gap;
+                events.push(TraceEvent::SortCompare {
+                    indices: [index, paired],
+                    message: format!(
+                        "Compare values {} and {} at gap {gap}.",
+                        values[index], values[paired]
+                    ),
+                });
+
+                if values[index] > values[paired] {
+                    values.swap(index, paired);
+                    swapped = true;
+                    events.push(TraceEvent::SortSwap {
+                        indices: [index, paired],
+                        values: values.clone(),
+                        message: format!("Swap positions {index} and {paired}."),
+                    });
+                }
+
+                index += 1;
+            }
+        }
+
+        events.push(TraceEvent::SortMarkSorted {
+            indices: (0..len).collect(),
+            message: "No gap pass needs a swap; values are sorted.".to_string(),
+        });
+    } else if len == 1 {
+        events.push(TraceEvent::SortMarkSorted {
+            indices: vec![0],
+            message: "Single value is already sorted.".to_string(),
+        });
+    }
+
+    let metadata = TraceMetadata {
+        algorithm_name: "Comb Sort".to_string(),
+        category: "Sorting".to_string(),
+        input_size: values.len(),
+        event_count: events.len(),
+        result_summary: format!("Sorted {} values.", values.len()),
+    };
+
+    Ok(Trace {
+        algorithm: AlgorithmId::CombSort,
         initial_state: VisualizationState::Array {
             values: initial_values,
         },
@@ -3576,6 +3676,52 @@ mod tests {
     }
 
     #[test]
+    fn comb_sort_trace_sorts_values() {
+        let trace = trace_comb_sort(SortInput {
+            values: vec![9, 3, 7, 1, 4, 8],
+        })
+        .expect("trace");
+
+        assert_eq!(
+            trace.final_state,
+            VisualizationState::Array {
+                values: vec![1, 3, 4, 7, 8, 9]
+            }
+        );
+        assert!(
+            trace
+                .events
+                .iter()
+                .any(|event| matches!(event, TraceEvent::SortPartition { .. }))
+        );
+        assert!(
+            trace
+                .events
+                .iter()
+                .any(|event| matches!(event, TraceEvent::SortCompare { .. }))
+        );
+        assert!(
+            trace
+                .events
+                .iter()
+                .any(|event| matches!(event, TraceEvent::SortSwap { .. }))
+        );
+        assert_valid_sort_trace(&trace);
+    }
+
+    #[test]
+    fn comb_sort_handles_empty_input() {
+        let trace = trace_comb_sort(SortInput { values: vec![] }).expect("trace");
+
+        assert_eq!(
+            trace.final_state,
+            VisualizationState::Array { values: vec![] }
+        );
+        assert!(trace.events.is_empty());
+        assert_valid_sort_trace(&trace);
+    }
+
+    #[test]
     fn mergesort_trace_sorts_values() {
         let trace = trace_mergesort(SortInput {
             values: vec![9, 3, 7, 1, 4],
@@ -3940,6 +4086,7 @@ mod tests {
             AlgorithmId::CountingSort,
             AlgorithmId::RadixSort,
             AlgorithmId::BucketSort,
+            AlgorithmId::CombSort,
             AlgorithmId::Mergesort,
             AlgorithmId::HeapSort,
             AlgorithmId::Bfs,
@@ -3962,6 +4109,7 @@ mod tests {
                 | AlgorithmId::CountingSort
                 | AlgorithmId::RadixSort
                 | AlgorithmId::BucketSort
+                | AlgorithmId::CombSort
                 | AlgorithmId::Mergesort
                 | AlgorithmId::HeapSort => assert_valid_sort_trace(&trace),
                 AlgorithmId::Bfs
@@ -3990,6 +4138,7 @@ mod tests {
                 | AlgorithmId::CountingSort
                 | AlgorithmId::RadixSort
                 | AlgorithmId::BucketSort
+                | AlgorithmId::CombSort
                 | AlgorithmId::Mergesort
                 | AlgorithmId::HeapSort
         ));

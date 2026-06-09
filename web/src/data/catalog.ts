@@ -107,6 +107,13 @@ export const algorithms: AlgorithmCatalogItem[] = [
     summary: "Distribute values into ranges, sort each bucket, then collect.",
   },
   {
+    id: "combSort",
+    label: "Comb Sort",
+    category: "sorting",
+    status: "available",
+    summary: "Shrink comparison gaps until adjacent swaps finish the order.",
+  },
+  {
     id: "mergesort",
     label: "Mergesort",
     category: "sorting",

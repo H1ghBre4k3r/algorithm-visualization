@@ -41,6 +41,13 @@ describe("parseSortInput", () => {
       value: { values: [9, 1, 4] },
     });
   });
+
+  it("routes comb sort custom input through the sort parser", () => {
+    expect(parseCustomInput("combSort", '{"values":[8,3,5]}')).toEqual({
+      type: "sort",
+      value: { values: [8, 3, 5] },
+    });
+  });
 });
 
 describe("parseGraphInput", () => {

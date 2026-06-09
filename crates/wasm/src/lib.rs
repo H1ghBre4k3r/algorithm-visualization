@@ -23,6 +23,7 @@ pub fn example_request_for(algorithm: &str) -> Result<JsValue, JsValue> {
         "countingSort" => AlgorithmId::CountingSort,
         "radixSort" => AlgorithmId::RadixSort,
         "bucketSort" => AlgorithmId::BucketSort,
+        "combSort" => AlgorithmId::CombSort,
         "mergesort" => AlgorithmId::Mergesort,
         "heapSort" => AlgorithmId::HeapSort,
         "bfs" => AlgorithmId::Bfs,

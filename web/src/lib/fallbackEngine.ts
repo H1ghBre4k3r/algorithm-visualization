@@ -42,6 +42,10 @@ export function generateTraceFallback(request: AlgorithmRequest): Trace {
     return traceBucketSort(request.input.value);
   }
 
+  if (request.algorithm === "combSort" && request.input.type === "sort") {
+    return traceCombSort(request.input.value);
+  }
+
   if (request.algorithm === "mergesort" && request.input.type === "sort") {
     return traceMergesort(request.input.value);
   }
@@ -679,6 +683,83 @@ function traceBucketSort(input: SortInput): Trace {
     events,
     metadata: {
       algorithmName: "Bucket Sort",
+      category: "Sorting",
+      inputSize: values.length,
+      eventCount: events.length,
+      resultSummary: `Sorted ${values.length} values.`,
+    },
+  };
+}
+
+function traceCombSort(input: SortInput): Trace {
+  const initialValues = [...input.values];
+  const values = [...input.values];
+  const events: TraceEvent[] = [];
+
+  if (values.length > 128) {
+    throw new Error("Comb Sort input is capped at 128 values for interactive playback.");
+  }
+
+  if (values.length > 1) {
+    let gap = values.length;
+    let swapped = true;
+
+    while (gap > 1 || swapped) {
+      gap = Math.max(1, Math.floor((gap * 10) / 13));
+      swapped = false;
+
+      events.push({
+        type: "sortPartition",
+        range: [0, values.length - 1],
+        boundary: gap,
+        scanner: 0,
+        message: `Scan values with gap ${gap}.`,
+      });
+
+      let index = 0;
+      while (index + gap < values.length) {
+        const paired = index + gap;
+        events.push({
+          type: "sortCompare",
+          indices: [index, paired],
+          message: `Compare values ${values[index]} and ${values[paired]} at gap ${gap}.`,
+        });
+
+        if (values[index] > values[paired]) {
+          swap(values, index, paired);
+          swapped = true;
+          events.push({
+            type: "sortSwap",
+            indices: [index, paired],
+            values: [...values],
+            message: `Swap positions ${index} and ${paired}.`,
+          });
+        }
+
+        index += 1;
+      }
+    }
+
+    events.push({
+      type: "sortMarkSorted",
+      indices: values.map((_, index) => index),
+      message: "No gap pass needs a swap; values are sorted.",
+    });
+  } else if (values.length === 1) {
+    events.push({
+      type: "sortMarkSorted",
+      indices: [0],
+      message: "Single value is already sorted.",
+    });
+  }
+
+  return {
+    algorithm: "combSort",
+    initialState: { type: "array", values: initialValues },
+    finalState: { type: "array", values },
+    events,
+    metadata: {
+      algorithmName: "Comb Sort",
       category: "Sorting",
       inputSize: values.length,
       eventCount: events.length,

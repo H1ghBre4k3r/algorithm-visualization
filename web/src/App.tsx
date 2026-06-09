@@ -58,6 +58,7 @@ export default function App() {
     countingSort: customTemplate("countingSort"),
     radixSort: customTemplate("radixSort"),
     bucketSort: customTemplate("bucketSort"),
+    combSort: customTemplate("combSort"),
     mergesort: customTemplate("mergesort"),
     heapSort: customTemplate("heapSort"),
     bfs: customTemplate("bfs"),
@@ -493,6 +494,9 @@ function optionsForAlgorithm(algorithm: AvailableAlgorithmId): AlgorithmRequest[
   if (algorithm === "bucketSort") {
     return { type: "bucketSort", value: {} };
   }
+  if (algorithm === "combSort") {
+    return { type: "combSort", value: {} };
+  }
   if (algorithm === "mergesort") {
     return { type: "mergesort", value: {} };
   }
@@ -542,6 +546,7 @@ function isSortAlgorithm(algorithm: AvailableAlgorithmId) {
     algorithm === "countingSort" ||
     algorithm === "radixSort" ||
     algorithm === "bucketSort" ||
+    algorithm === "combSort" ||
     algorithm === "mergesort" ||
     algorithm === "heapSort"
   );
