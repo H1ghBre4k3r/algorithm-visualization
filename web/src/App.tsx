@@ -54,6 +54,7 @@ export default function App() {
     insertionSort: customTemplate("insertionSort"),
     bubbleSort: customTemplate("bubbleSort"),
     selectionSort: customTemplate("selectionSort"),
+    shellSort: customTemplate("shellSort"),
     mergesort: customTemplate("mergesort"),
     heapSort: customTemplate("heapSort"),
     bfs: customTemplate("bfs"),
@@ -477,6 +478,9 @@ function optionsForAlgorithm(algorithm: AvailableAlgorithmId): AlgorithmRequest[
   if (algorithm === "selectionSort") {
     return { type: "selectionSort", value: {} };
   }
+  if (algorithm === "shellSort") {
+    return { type: "shellSort", value: {} };
+  }
   if (algorithm === "mergesort") {
     return { type: "mergesort", value: {} };
   }
@@ -522,6 +526,7 @@ function isSortAlgorithm(algorithm: AvailableAlgorithmId) {
     algorithm === "insertionSort" ||
     algorithm === "bubbleSort" ||
     algorithm === "selectionSort" ||
+    algorithm === "shellSort" ||
     algorithm === "mergesort" ||
     algorithm === "heapSort"
   );

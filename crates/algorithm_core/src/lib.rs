@@ -10,6 +10,7 @@ pub enum AlgorithmId {
     InsertionSort,
     BubbleSort,
     SelectionSort,
+    ShellSort,
     Mergesort,
     HeapSort,
     Bfs,
@@ -56,6 +57,7 @@ pub enum AlgorithmOptions {
     InsertionSort(InsertionSortOptions),
     BubbleSort(BubbleSortOptions),
     SelectionSort(SelectionSortOptions),
+    ShellSort(ShellSortOptions),
     Mergesort(MergesortOptions),
     HeapSort(HeapSortOptions),
     Bfs(BfsOptions),
@@ -91,6 +93,10 @@ pub struct BubbleSortOptions {}
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct SelectionSortOptions {}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct ShellSortOptions {}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
@@ -399,6 +405,7 @@ pub fn generate_trace(request: AlgorithmRequest) -> Result<Trace, AlgorithmError
         (AlgorithmId::InsertionSort, InputData::Sort(input)) => trace_insertion_sort(input),
         (AlgorithmId::BubbleSort, InputData::Sort(input)) => trace_bubble_sort(input),
         (AlgorithmId::SelectionSort, InputData::Sort(input)) => trace_selection_sort(input),
+        (AlgorithmId::ShellSort, InputData::Sort(input)) => trace_shell_sort(input),
         (AlgorithmId::Mergesort, InputData::Sort(input)) => trace_mergesort(input),
         (AlgorithmId::HeapSort, InputData::Sort(input)) => trace_heap_sort(input),
         (AlgorithmId::Bfs, InputData::Graph(input)) => {
@@ -445,6 +452,9 @@ pub fn generate_trace(request: AlgorithmRequest) -> Result<Trace, AlgorithmError
         )),
         (AlgorithmId::SelectionSort, _) => Err(AlgorithmError::new(
             "Selection Sort requires sort input with a values array.",
+        )),
+        (AlgorithmId::ShellSort, _) => Err(AlgorithmError::new(
+            "Shell Sort requires sort input with a values array.",
         )),
         (AlgorithmId::Mergesort, _) => Err(AlgorithmError::new(
             "Mergesort requires sort input with a values array.",
@@ -521,6 +531,14 @@ pub fn example_request(algorithm: AlgorithmId) -> AlgorithmRequest {
             options: Some(AlgorithmOptions::SelectionSort(
                 SelectionSortOptions::default(),
             )),
+        },
+        AlgorithmId::ShellSort => AlgorithmRequest {
+            algorithm,
+            input_mode: InputMode::Example,
+            input: InputData::Sort(SortInput {
+                values: vec![42, 12, 77, 18, 93, 31, 64, 5, 56, 29],
+            }),
+            options: Some(AlgorithmOptions::ShellSort(ShellSortOptions::default())),
         },
         AlgorithmId::Mergesort => AlgorithmRequest {
             algorithm,
@@ -868,6 +886,110 @@ pub fn trace_selection_sort(input: SortInput) -> Result<Trace, AlgorithmError> {
 
     Ok(Trace {
         algorithm: AlgorithmId::SelectionSort,
+        initial_state: VisualizationState::Array {
+            values: initial_values,
+        },
+        final_state: VisualizationState::Array { values },
+        events,
+        metadata,
+    })
+}
+
+pub fn trace_shell_sort(input: SortInput) -> Result<Trace, AlgorithmError> {
+    if input.values.len() > 128 {
+        return Err(AlgorithmError::new(
+            "Shell Sort input is capped at 128 values for interactive playback.",
+        ));
+    }
+
+    let initial_values = input.values.clone();
+    let mut values = input.values;
+    let mut events = Vec::new();
+    let len = values.len();
+    let mut gap = len / 2;
+
+    while gap > 0 {
+        events.push(TraceEvent::SortPartition {
+            range: [0, len.saturating_sub(1)],
+            boundary: gap,
+            scanner: gap,
+            message: format!("Start a gapped insertion pass with gap {gap}."),
+        });
+
+        for index in gap..len {
+            let value = values[index];
+            let mut cursor = index;
+            events.push(TraceEvent::SortPartition {
+                range: [0, len - 1],
+                boundary: gap,
+                scanner: index,
+                message: format!("Insert value {value} through the gap-{gap} subsequence."),
+            });
+
+            while cursor >= gap {
+                events.push(TraceEvent::SortCompare {
+                    indices: [cursor - gap, cursor],
+                    message: format!(
+                        "Compare {} and {} across gap {gap}.",
+                        values[cursor - gap],
+                        value
+                    ),
+                });
+
+                if values[cursor - gap] <= value {
+                    break;
+                }
+
+                values[cursor] = values[cursor - gap];
+                events.push(TraceEvent::SortSwap {
+                    indices: [cursor - gap, cursor],
+                    values: values.clone(),
+                    message: format!(
+                        "Shift {} from index {} to {cursor}.",
+                        values[cursor],
+                        cursor - gap
+                    ),
+                });
+                cursor -= gap;
+            }
+
+            if cursor != index {
+                values[cursor] = value;
+                events.push(TraceEvent::SortSwap {
+                    indices: [cursor, index],
+                    values: values.clone(),
+                    message: format!("Place {value} at index {cursor}."),
+                });
+            }
+        }
+
+        if gap == 1 {
+            events.push(TraceEvent::SortMarkSorted {
+                indices: (0..len).collect(),
+                message: "Final gap pass complete; all values are sorted.".to_string(),
+            });
+        }
+
+        gap /= 2;
+    }
+
+    if len == 1 {
+        events.push(TraceEvent::SortMarkSorted {
+            indices: vec![0],
+            message: "Single value is already sorted.".to_string(),
+        });
+    }
+
+    let metadata = TraceMetadata {
+        algorithm_name: "Shell Sort".to_string(),
+        category: "Sorting".to_string(),
+        input_size: values.len(),
+        event_count: events.len(),
+        result_summary: format!("Sorted {} values.", values.len()),
+    };
+
+    Ok(Trace {
+        algorithm: AlgorithmId::ShellSort,
         initial_state: VisualizationState::Array {
             values: initial_values,
         },
@@ -2958,6 +3080,34 @@ mod tests {
     }
 
     #[test]
+    fn shell_sort_trace_sorts_values() {
+        let trace = trace_shell_sort(SortInput {
+            values: vec![9, 3, 7, 1, 4],
+        })
+        .expect("trace");
+
+        assert_eq!(
+            trace.final_state,
+            VisualizationState::Array {
+                values: vec![1, 3, 4, 7, 9]
+            }
+        );
+        assert!(
+            trace
+                .events
+                .iter()
+                .any(|event| matches!(event, TraceEvent::SortPartition { .. }))
+        );
+        assert!(
+            trace
+                .events
+                .iter()
+                .any(|event| matches!(event, TraceEvent::SortSwap { .. }))
+        );
+        assert_valid_sort_trace(&trace);
+    }
+
+    #[test]
     fn mergesort_trace_sorts_values() {
         let trace = trace_mergesort(SortInput {
             values: vec![9, 3, 7, 1, 4],
@@ -3318,6 +3468,7 @@ mod tests {
             AlgorithmId::InsertionSort,
             AlgorithmId::BubbleSort,
             AlgorithmId::SelectionSort,
+            AlgorithmId::ShellSort,
             AlgorithmId::Mergesort,
             AlgorithmId::HeapSort,
             AlgorithmId::Bfs,
@@ -3336,6 +3487,7 @@ mod tests {
                 | AlgorithmId::InsertionSort
                 | AlgorithmId::BubbleSort
                 | AlgorithmId::SelectionSort
+                | AlgorithmId::ShellSort
                 | AlgorithmId::Mergesort
                 | AlgorithmId::HeapSort => assert_valid_sort_trace(&trace),
                 AlgorithmId::Bfs
@@ -3360,6 +3512,7 @@ mod tests {
                 | AlgorithmId::InsertionSort
                 | AlgorithmId::BubbleSort
                 | AlgorithmId::SelectionSort
+                | AlgorithmId::ShellSort
                 | AlgorithmId::Mergesort
                 | AlgorithmId::HeapSort
         ));

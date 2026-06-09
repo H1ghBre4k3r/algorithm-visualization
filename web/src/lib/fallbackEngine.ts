@@ -26,6 +26,10 @@ export function generateTraceFallback(request: AlgorithmRequest): Trace {
     return traceSelectionSort(request.input.value);
   }
 
+  if (request.algorithm === "shellSort" && request.input.type === "sort") {
+    return traceShellSort(request.input.value);
+  }
+
   if (request.algorithm === "mergesort" && request.input.type === "sort") {
     return traceMergesort(request.input.value);
   }
@@ -314,6 +318,99 @@ function traceSelectionSort(input: SortInput): Trace {
     events,
     metadata: {
       algorithmName: "Selection Sort",
+      category: "Sorting",
+      inputSize: values.length,
+      eventCount: events.length,
+      resultSummary: `Sorted ${values.length} values.`,
+    },
+  };
+}
+
+function traceShellSort(input: SortInput): Trace {
+  const initialValues = [...input.values];
+  const values = [...input.values];
+  const events: TraceEvent[] = [];
+
+  if (values.length > 128) {
+    throw new Error("Shell Sort input is capped at 128 values for interactive playback.");
+  }
+
+  for (let gap = Math.floor(values.length / 2); gap > 0; gap = Math.floor(gap / 2)) {
+    events.push({
+      type: "sortPartition",
+      range: [0, Math.max(0, values.length - 1)],
+      boundary: gap,
+      scanner: gap,
+      message: `Start a gapped insertion pass with gap ${gap}.`,
+    });
+
+    for (let index = gap; index < values.length; index += 1) {
+      const value = values[index];
+      let cursor = index;
+      events.push({
+        type: "sortPartition",
+        range: [0, values.length - 1],
+        boundary: gap,
+        scanner: index,
+        message: `Insert value ${value} through the gap-${gap} subsequence.`,
+      });
+
+      while (cursor >= gap) {
+        events.push({
+          type: "sortCompare",
+          indices: [cursor - gap, cursor],
+          message: `Compare ${values[cursor - gap]} and ${value} across gap ${gap}.`,
+        });
+
+        if (values[cursor - gap] <= value) {
+          break;
+        }
+
+        values[cursor] = values[cursor - gap];
+        events.push({
+          type: "sortSwap",
+          indices: [cursor - gap, cursor],
+          values: [...values],
+          message: `Shift ${values[cursor]} from index ${cursor - gap} to ${cursor}.`,
+        });
+        cursor -= gap;
+      }
+
+      if (cursor !== index) {
+        values[cursor] = value;
+        events.push({
+          type: "sortSwap",
+          indices: [cursor, index],
+          values: [...values],
+          message: `Place ${value} at index ${cursor}.`,
+        });
+      }
+    }
+
+    if (gap === 1) {
+      events.push({
+        type: "sortMarkSorted",
+        indices: values.map((_, index) => index),
+        message: "Final gap pass complete; all values are sorted.",
+      });
+    }
+  }
+
+  if (values.length === 1) {
+    events.push({
+      type: "sortMarkSorted",
+      indices: [0],
+      message: "Single value is already sorted.",
+    });
+  }
+
+  return {
+    algorithm: "shellSort",
+    initialState: { type: "array", values: initialValues },
+    finalState: { type: "array", values },
+    events,
+    metadata: {
+      algorithmName: "Shell Sort",
       category: "Sorting",
       inputSize: values.length,
       eventCount: events.length,

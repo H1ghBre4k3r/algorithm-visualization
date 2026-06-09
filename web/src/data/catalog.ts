@@ -79,6 +79,13 @@ export const algorithms: AlgorithmCatalogItem[] = [
     summary: "Select the smallest remaining value for each sorted position.",
   },
   {
+    id: "shellSort",
+    label: "Shell Sort",
+    category: "sorting",
+    status: "available",
+    summary: "Sort distant subsequences, then tighten the gap to finish.",
+  },
+  {
     id: "mergesort",
     label: "Mergesort",
     category: "sorting",

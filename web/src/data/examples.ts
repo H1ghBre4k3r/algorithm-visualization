@@ -44,6 +44,7 @@ export function exampleRequest(algorithm: AvailableAlgorithmId): AlgorithmReques
     algorithm === "insertionSort" ||
     algorithm === "bubbleSort" ||
     algorithm === "selectionSort" ||
+    algorithm === "shellSort" ||
     algorithm === "mergesort" ||
     algorithm === "heapSort"
   ) {
@@ -60,9 +61,11 @@ export function exampleRequest(algorithm: AvailableAlgorithmId): AlgorithmReques
               ? { type: "bubbleSort", value: {} }
               : algorithm === "selectionSort"
                 ? { type: "selectionSort", value: {} }
-                : algorithm === "mergesort"
-                  ? { type: "mergesort", value: {} }
-                  : { type: "heapSort", value: {} },
+                : algorithm === "shellSort"
+                  ? { type: "shellSort", value: {} }
+                  : algorithm === "mergesort"
+                    ? { type: "mergesort", value: {} }
+                    : { type: "heapSort", value: {} },
     };
   }
 
@@ -127,6 +130,7 @@ export function customTemplate(algorithm: AvailableAlgorithmId): string {
     algorithm === "insertionSort" ||
     algorithm === "bubbleSort" ||
     algorithm === "selectionSort" ||
+    algorithm === "shellSort" ||
     algorithm === "mergesort" ||
     algorithm === "heapSort"
       ? exampleSortInput
