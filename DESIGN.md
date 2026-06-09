@@ -42,6 +42,7 @@ Reference: https://impeccable.style
   - Odd-even phase: violet full-range band with amber alternating adjacent pairs.
   - Pancake flip: violet prefix band with red flip swaps and green fixed suffix.
   - Quickselect: violet search range with amber pivot comparisons and green selected rank.
+  - Bitonic network: violet merge stage bands with amber compare-exchange pairs.
   - Bubble pass fixed tail: green.
   - Merge range: violet range wash with amber comparisons.
   - Timsort run: violet natural-run bands with amber run-head comparisons.

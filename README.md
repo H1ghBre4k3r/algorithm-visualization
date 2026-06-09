@@ -11,6 +11,7 @@ Browser-first algorithm visualization MVP with a Rust trace core, WASM bindings,
 - Odd-Even Sort trace generation and animated bar visualization.
 - Pancake Sort trace generation and animated bar visualization.
 - Quickselect trace generation and animated rank-selection visualization.
+- Bitonic Sort trace generation and animated sorting-network visualization.
 - Selection Sort trace generation and animated bar visualization.
 - Shell Sort trace generation and animated bar visualization.
 - Counting Sort trace generation and animated bar visualization.

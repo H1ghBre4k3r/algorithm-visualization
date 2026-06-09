@@ -89,6 +89,17 @@ describe("parseSortInput", () => {
       "targetIndex",
     );
   });
+
+  it("routes bitonic sort custom input through the sort parser", () => {
+    expect(parseCustomInput("bitonicSort", '{"values":[8,3,5,1]}')).toEqual({
+      type: "sort",
+      value: { values: [8, 3, 5, 1] },
+    });
+  });
+
+  it("rejects bitonic sort input that is not a power of two", () => {
+    expect(() => parseCustomInput("bitonicSort", '{"values":[8,3,5]}')).toThrow("power-of-two");
+  });
 });
 
 describe("parseGraphInput", () => {

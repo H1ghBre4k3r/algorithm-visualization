@@ -9,6 +9,10 @@ export const exampleQuickselectInput: SortInput = {
   targetIndex: 4,
 };
 
+export const exampleBitonicInput: SortInput = {
+  values: [42, 12, 77, 18, 93, 31, 64, 5],
+};
+
 export const exampleGraphInput: GraphInput = {
   nodes: [
     { id: "A", label: "A", x: 0.13, y: 0.48 },
@@ -52,6 +56,7 @@ export function exampleRequest(algorithm: AvailableAlgorithmId): AlgorithmReques
     algorithm === "oddEvenSort" ||
     algorithm === "pancakeSort" ||
     algorithm === "quickselect" ||
+    algorithm === "bitonicSort" ||
     algorithm === "selectionSort" ||
     algorithm === "shellSort" ||
     algorithm === "countingSort" ||
@@ -67,7 +72,13 @@ export function exampleRequest(algorithm: AvailableAlgorithmId): AlgorithmReques
       inputMode: "example",
       input: {
         type: "sort",
-        value: structuredClone(algorithm === "quickselect" ? exampleQuickselectInput : exampleSortInput),
+        value: structuredClone(
+          algorithm === "quickselect"
+            ? exampleQuickselectInput
+            : algorithm === "bitonicSort"
+              ? exampleBitonicInput
+              : exampleSortInput,
+        ),
       },
       options:
         algorithm === "quicksort"
@@ -84,23 +95,25 @@ export function exampleRequest(algorithm: AvailableAlgorithmId): AlgorithmReques
                     ? { type: "pancakeSort", value: {} }
                     : algorithm === "quickselect"
                       ? { type: "quickselect", value: {} }
-                      : algorithm === "selectionSort"
-                        ? { type: "selectionSort", value: {} }
-                        : algorithm === "shellSort"
-                          ? { type: "shellSort", value: {} }
-                          : algorithm === "countingSort"
-                            ? { type: "countingSort", value: {} }
-                            : algorithm === "radixSort"
-                              ? { type: "radixSort", value: {} }
-                              : algorithm === "bucketSort"
-                                ? { type: "bucketSort", value: {} }
-                                : algorithm === "combSort"
-                                  ? { type: "combSort", value: {} }
-                                  : algorithm === "mergesort"
-                                    ? { type: "mergesort", value: {} }
-                                    : algorithm === "timsort"
-                                      ? { type: "timsort", value: {} }
-                                      : { type: "heapSort", value: {} },
+                      : algorithm === "bitonicSort"
+                        ? { type: "bitonicSort", value: {} }
+                        : algorithm === "selectionSort"
+                          ? { type: "selectionSort", value: {} }
+                          : algorithm === "shellSort"
+                            ? { type: "shellSort", value: {} }
+                            : algorithm === "countingSort"
+                              ? { type: "countingSort", value: {} }
+                              : algorithm === "radixSort"
+                                ? { type: "radixSort", value: {} }
+                                : algorithm === "bucketSort"
+                                  ? { type: "bucketSort", value: {} }
+                                  : algorithm === "combSort"
+                                    ? { type: "combSort", value: {} }
+                                    : algorithm === "mergesort"
+                                      ? { type: "mergesort", value: {} }
+                                      : algorithm === "timsort"
+                                        ? { type: "timsort", value: {} }
+                                        : { type: "heapSort", value: {} },
     };
   }
 
@@ -168,6 +181,7 @@ export function customTemplate(algorithm: AvailableAlgorithmId): string {
     algorithm === "oddEvenSort" ||
     algorithm === "pancakeSort" ||
     algorithm === "quickselect" ||
+    algorithm === "bitonicSort" ||
     algorithm === "selectionSort" ||
     algorithm === "shellSort" ||
     algorithm === "countingSort" ||
@@ -179,6 +193,8 @@ export function customTemplate(algorithm: AvailableAlgorithmId): string {
     algorithm === "heapSort"
       ? algorithm === "quickselect"
         ? exampleQuickselectInput
+        : algorithm === "bitonicSort"
+          ? exampleBitonicInput
         : exampleSortInput
       : algorithm === "kmp"
         ? exampleSequenceInput

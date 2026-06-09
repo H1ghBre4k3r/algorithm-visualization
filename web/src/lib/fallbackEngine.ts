@@ -38,6 +38,10 @@ export function generateTraceFallback(request: AlgorithmRequest): Trace {
     return traceQuickselect(request.input.value);
   }
 
+  if (request.algorithm === "bitonicSort" && request.input.type === "sort") {
+    return traceBitonicSort(request.input.value);
+  }
+
   if (request.algorithm === "selectionSort" && request.input.type === "sort") {
     return traceSelectionSort(request.input.value);
   }
@@ -691,6 +695,131 @@ function pancakeFlip(values: number[], end: number, events: TraceEvent[]) {
     });
     left += 1;
     right -= 1;
+  }
+}
+
+function traceBitonicSort(input: SortInput): Trace {
+  const initialValues = [...input.values];
+  const values = [...input.values];
+  const events: TraceEvent[] = [];
+
+  if (values.length > 128) {
+    throw new Error("Bitonic Sort input is capped at 128 values for interactive playback.");
+  }
+  if (values.length > 1 && !isPowerOfTwo(values.length)) {
+    throw new Error("Bitonic Sort requires a power-of-two number of values.");
+  }
+
+  if (values.length > 1) {
+    bitonicSortRange(values, 0, values.length, true, events);
+    events.push({
+      type: "sortMarkSorted",
+      indices: values.map((_, index) => index),
+      message: "Bitonic network complete; all values are sorted.",
+    });
+  } else if (values.length === 1) {
+    events.push({
+      type: "sortMarkSorted",
+      indices: [0],
+      message: "Single value is already sorted.",
+    });
+  }
+
+  return {
+    algorithm: "bitonicSort",
+    initialState: { type: "array", values: initialValues },
+    finalState: { type: "array", values },
+    events,
+    metadata: {
+      algorithmName: "Bitonic Sort",
+      category: "Sorting",
+      inputSize: values.length,
+      eventCount: events.length,
+      resultSummary: `Sorted ${values.length} values.`,
+    },
+  };
+}
+
+function bitonicSortRange(
+  values: number[],
+  start: number,
+  length: number,
+  ascending: boolean,
+  events: TraceEvent[],
+) {
+  if (length <= 1) {
+    events.push({
+      type: "sortMarkSorted",
+      indices: [start],
+      message: `Single network lane ${start} is already ordered.`,
+    });
+    return;
+  }
+
+  const half = length / 2;
+  const end = start + length - 1;
+  events.push({
+    type: "sortPartition",
+    range: [start, end],
+    boundary: start + half,
+    scanner: start,
+    message: `Build ${ascending ? "ascending" : "descending"} bitonic run across ${start}..${end}.`,
+  });
+
+  bitonicSortRange(values, start, half, true, events);
+  bitonicSortRange(values, start + half, half, false, events);
+  bitonicMerge(values, start, length, ascending, events);
+}
+
+function bitonicMerge(
+  values: number[],
+  start: number,
+  length: number,
+  ascending: boolean,
+  events: TraceEvent[],
+) {
+  if (length <= 1) return;
+
+  const half = length / 2;
+  const end = start + length - 1;
+  events.push({
+    type: "sortPartition",
+    range: [start, end],
+    boundary: start + half,
+    scanner: start,
+    message: `Merge ${ascending ? "ascending" : "descending"} bitonic run across ${start}..${end}.`,
+  });
+
+  for (let offset = 0; offset < half; offset += 1) {
+    const left = start + offset;
+    const right = left + half;
+    events.push({
+      type: "sortCompare",
+      indices: [left, right],
+      message: `Compare network pair ${left} and ${right} for ${ascending ? "ascending" : "descending"} order.`,
+    });
+
+    const outOfOrder = ascending ? values[left] > values[right] : values[left] < values[right];
+    if (outOfOrder) {
+      swap(values, left, right);
+      events.push({
+        type: "sortSwap",
+        indices: [left, right],
+        values: [...values],
+        message: `Exchange network pair ${left} and ${right}.`,
+      });
+    }
+  }
+
+  bitonicMerge(values, start, half, ascending, events);
+  bitonicMerge(values, start + half, half, ascending, events);
+
+  if (ascending) {
+    events.push({
+      type: "sortMarkSorted",
+      indices: Array.from({ length }, (_, index) => start + index),
+      message: `Ascending network range ${start}..${end} is ordered.`,
+    });
   }
 }
 
@@ -3126,4 +3255,8 @@ function swap(values: number[], left: number, right: number) {
   const next = values[left];
   values[left] = values[right];
   values[right] = next;
+}
+
+function isPowerOfTwo(value: number) {
+  return value === 0 || (value > 0 && (value & (value - 1)) === 0);
 }

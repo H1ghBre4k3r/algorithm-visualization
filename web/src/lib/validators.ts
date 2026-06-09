@@ -24,6 +24,7 @@ export function parseCustomInput(algorithm: AvailableAlgorithmId, raw: string): 
     algorithm === "oddEvenSort" ||
     algorithm === "pancakeSort" ||
     algorithm === "quickselect" ||
+    algorithm === "bitonicSort" ||
     algorithm === "selectionSort" ||
     algorithm === "shellSort" ||
     algorithm === "countingSort" ||
@@ -34,7 +35,11 @@ export function parseCustomInput(algorithm: AvailableAlgorithmId, raw: string): 
     algorithm === "timsort" ||
     algorithm === "heapSort"
   ) {
-    return { type: "sort", value: parseSortInput(raw) };
+    const input = parseSortInput(raw);
+    if (algorithm === "bitonicSort" && !isPowerOfTwo(input.values.length)) {
+      throw new InputValidationError("Bitonic Sort needs a power-of-two number of values.");
+    }
+    return { type: "sort", value: input };
   }
   if (algorithm === "kmp") {
     return { type: "sequence", value: parseKmpInput(raw) };
@@ -237,4 +242,8 @@ function readUnitNumber(value: unknown, label: string): number {
     throw new InputValidationError(`${label} must be a number between 0 and 1.`);
   }
   return value;
+}
+
+function isPowerOfTwo(value: number): boolean {
+  return value === 0 || (value > 0 && (value & (value - 1)) === 0);
 }

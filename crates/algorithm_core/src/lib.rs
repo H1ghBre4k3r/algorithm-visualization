@@ -13,6 +13,7 @@ pub enum AlgorithmId {
     OddEvenSort,
     PancakeSort,
     Quickselect,
+    BitonicSort,
     SelectionSort,
     ShellSort,
     CountingSort,
@@ -69,6 +70,7 @@ pub enum AlgorithmOptions {
     OddEvenSort(OddEvenSortOptions),
     PancakeSort(PancakeSortOptions),
     Quickselect(QuickselectOptions),
+    BitonicSort(BitonicSortOptions),
     SelectionSort(SelectionSortOptions),
     ShellSort(ShellSortOptions),
     CountingSort(CountingSortOptions),
@@ -123,6 +125,10 @@ pub struct PancakeSortOptions {}
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct QuickselectOptions {}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct BitonicSortOptions {}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
@@ -466,6 +472,7 @@ pub fn generate_trace(request: AlgorithmRequest) -> Result<Trace, AlgorithmError
         (AlgorithmId::OddEvenSort, InputData::Sort(input)) => trace_odd_even_sort(input),
         (AlgorithmId::PancakeSort, InputData::Sort(input)) => trace_pancake_sort(input),
         (AlgorithmId::Quickselect, InputData::Sort(input)) => trace_quickselect(input),
+        (AlgorithmId::BitonicSort, InputData::Sort(input)) => trace_bitonic_sort(input),
         (AlgorithmId::SelectionSort, InputData::Sort(input)) => trace_selection_sort(input),
         (AlgorithmId::ShellSort, InputData::Sort(input)) => trace_shell_sort(input),
         (AlgorithmId::CountingSort, InputData::Sort(input)) => trace_counting_sort(input),
@@ -528,6 +535,9 @@ pub fn generate_trace(request: AlgorithmRequest) -> Result<Trace, AlgorithmError
         )),
         (AlgorithmId::Quickselect, _) => Err(AlgorithmError::new(
             "Quickselect requires sort input with a values array and optional targetIndex.",
+        )),
+        (AlgorithmId::BitonicSort, _) => Err(AlgorithmError::new(
+            "Bitonic Sort requires sort input with a power-of-two values array.",
         )),
         (AlgorithmId::SelectionSort, _) => Err(AlgorithmError::new(
             "Selection Sort requires sort input with a values array.",
@@ -656,6 +666,15 @@ pub fn example_request(algorithm: AlgorithmId) -> AlgorithmRequest {
                 target_index: Some(4),
             }),
             options: Some(AlgorithmOptions::Quickselect(QuickselectOptions::default())),
+        },
+        AlgorithmId::BitonicSort => AlgorithmRequest {
+            algorithm,
+            input_mode: InputMode::Example,
+            input: InputData::Sort(SortInput {
+                values: vec![42, 12, 77, 18, 93, 31, 64, 5],
+                target_index: None,
+            }),
+            options: Some(AlgorithmOptions::BitonicSort(BitonicSortOptions::default())),
         },
         AlgorithmId::SelectionSort => AlgorithmRequest {
             algorithm,
@@ -2180,6 +2199,55 @@ pub fn trace_pancake_sort(input: SortInput) -> Result<Trace, AlgorithmError> {
     })
 }
 
+pub fn trace_bitonic_sort(input: SortInput) -> Result<Trace, AlgorithmError> {
+    if input.values.len() > 128 {
+        return Err(AlgorithmError::new(
+            "Bitonic Sort input is capped at 128 values for interactive playback.",
+        ));
+    }
+    if input.values.len() > 1 && !input.values.len().is_power_of_two() {
+        return Err(AlgorithmError::new(
+            "Bitonic Sort requires a power-of-two number of values.",
+        ));
+    }
+
+    let initial_values = input.values.clone();
+    let mut values = input.values;
+    let mut events = Vec::new();
+    let len = values.len();
+
+    if len > 1 {
+        bitonic_sort_range(&mut values, 0, len, true, &mut events);
+        events.push(TraceEvent::SortMarkSorted {
+            indices: (0..len).collect(),
+            message: "Bitonic network complete; all values are sorted.".to_string(),
+        });
+    } else if len == 1 {
+        events.push(TraceEvent::SortMarkSorted {
+            indices: vec![0],
+            message: "Single value is already sorted.".to_string(),
+        });
+    }
+
+    let metadata = TraceMetadata {
+        algorithm_name: "Bitonic Sort".to_string(),
+        category: "Sorting".to_string(),
+        input_size: values.len(),
+        event_count: events.len(),
+        result_summary: format!("Sorted {} values.", values.len()),
+    };
+
+    Ok(Trace {
+        algorithm: AlgorithmId::BitonicSort,
+        initial_state: VisualizationState::Array {
+            values: initial_values,
+        },
+        final_state: VisualizationState::Array { values },
+        events,
+        metadata,
+    })
+}
+
 fn pancake_flip(values: &mut [i32], end: usize, events: &mut Vec<TraceEvent>) {
     let mut left = 0;
     let mut right = end;
@@ -2193,6 +2261,99 @@ fn pancake_flip(values: &mut [i32], end: usize, events: &mut Vec<TraceEvent>) {
         });
         left += 1;
         right -= 1;
+    }
+}
+
+fn bitonic_sort_range(
+    values: &mut [i32],
+    start: usize,
+    length: usize,
+    ascending: bool,
+    events: &mut Vec<TraceEvent>,
+) {
+    if length <= 1 {
+        events.push(TraceEvent::SortMarkSorted {
+            indices: vec![start],
+            message: format!("Single network lane {start} is already ordered."),
+        });
+        return;
+    }
+
+    let half = length / 2;
+    let end = start + length - 1;
+    events.push(TraceEvent::SortPartition {
+        range: [start, end],
+        boundary: start + half,
+        scanner: start,
+        message: format!(
+            "Build {} bitonic run across {start}..{end}.",
+            if ascending { "ascending" } else { "descending" }
+        ),
+    });
+
+    bitonic_sort_range(values, start, half, true, events);
+    bitonic_sort_range(values, start + half, half, false, events);
+    bitonic_merge(values, start, length, ascending, events);
+}
+
+fn bitonic_merge(
+    values: &mut [i32],
+    start: usize,
+    length: usize,
+    ascending: bool,
+    events: &mut Vec<TraceEvent>,
+) {
+    if length <= 1 {
+        return;
+    }
+
+    let half = length / 2;
+    let end = start + length - 1;
+    events.push(TraceEvent::SortPartition {
+        range: [start, end],
+        boundary: start + half,
+        scanner: start,
+        message: format!(
+            "Merge {} bitonic run across {start}..{end}.",
+            if ascending { "ascending" } else { "descending" }
+        ),
+    });
+
+    for offset in 0..half {
+        let left = start + offset;
+        let right = left + half;
+        events.push(TraceEvent::SortCompare {
+            indices: [left, right],
+            message: format!(
+                "Compare network pair {left} and {right} for {} order.",
+                if ascending { "ascending" } else { "descending" }
+            ),
+        });
+
+        let out_of_order = if ascending {
+            values[left] > values[right]
+        } else {
+            values[left] < values[right]
+        };
+
+        if out_of_order {
+            values.swap(left, right);
+            events.push(TraceEvent::SortSwap {
+                indices: [left, right],
+                values: values.to_vec(),
+                message: format!("Exchange network pair {left} and {right}."),
+            });
+        }
+    }
+
+    bitonic_merge(values, start, half, ascending, events);
+    bitonic_merge(values, start + half, half, ascending, events);
+
+    if ascending {
+        events.push(TraceEvent::SortMarkSorted {
+            indices: (start..=end).collect(),
+            message: format!("Ascending network range {start}..{end} is ordered."),
+        });
     }
 }
 
@@ -4887,6 +5048,68 @@ mod tests {
     }
 
     #[test]
+    fn bitonic_sort_trace_sorts_values() {
+        let trace = trace_bitonic_sort(SortInput {
+            values: vec![9, 3, 7, 1, 4, 8, 2, 6],
+            target_index: None,
+        })
+        .expect("trace");
+
+        assert_eq!(
+            trace.final_state,
+            VisualizationState::Array {
+                values: vec![1, 2, 3, 4, 6, 7, 8, 9]
+            }
+        );
+        assert!(
+            trace
+                .events
+                .iter()
+                .any(|event| matches!(event, TraceEvent::SortPartition { .. }))
+        );
+        assert!(
+            trace
+                .events
+                .iter()
+                .any(|event| matches!(event, TraceEvent::SortCompare { .. }))
+        );
+        assert!(
+            trace
+                .events
+                .iter()
+                .any(|event| matches!(event, TraceEvent::SortSwap { .. }))
+        );
+        assert_valid_sort_trace(&trace);
+    }
+
+    #[test]
+    fn bitonic_sort_handles_empty_input() {
+        let trace = trace_bitonic_sort(SortInput {
+            values: vec![],
+            target_index: None,
+        })
+        .expect("trace");
+
+        assert_eq!(
+            trace.final_state,
+            VisualizationState::Array { values: vec![] }
+        );
+        assert!(trace.events.is_empty());
+        assert_valid_sort_trace(&trace);
+    }
+
+    #[test]
+    fn bitonic_sort_rejects_non_power_of_two_lengths() {
+        let error = trace_bitonic_sort(SortInput {
+            values: vec![3, 1, 2],
+            target_index: None,
+        })
+        .expect_err("invalid bitonic input");
+
+        assert!(error.message().contains("power-of-two"));
+    }
+
+    #[test]
     fn bfs_trace_finds_shortest_unweighted_path() {
         let trace = trace_bfs(example_graph(), true).expect("trace");
 
@@ -5203,6 +5426,7 @@ mod tests {
             AlgorithmId::HeapSort,
             AlgorithmId::PancakeSort,
             AlgorithmId::Quickselect,
+            AlgorithmId::BitonicSort,
             AlgorithmId::Bfs,
             AlgorithmId::Dfs,
             AlgorithmId::Dijkstra,
@@ -5229,7 +5453,8 @@ mod tests {
                 | AlgorithmId::Mergesort
                 | AlgorithmId::Timsort
                 | AlgorithmId::HeapSort
-                | AlgorithmId::PancakeSort => assert_valid_sort_trace(&trace),
+                | AlgorithmId::PancakeSort
+                | AlgorithmId::BitonicSort => assert_valid_sort_trace(&trace),
                 AlgorithmId::Quickselect => assert_valid_quickselect_trace(&trace),
                 AlgorithmId::Bfs
                 | AlgorithmId::Dfs
@@ -5264,6 +5489,7 @@ mod tests {
                 | AlgorithmId::Timsort
                 | AlgorithmId::HeapSort
                 | AlgorithmId::PancakeSort
+                | AlgorithmId::BitonicSort
         ));
         assert_eq!(trace.metadata.event_count, trace.events.len());
 

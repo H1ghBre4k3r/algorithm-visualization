@@ -57,6 +57,7 @@ export default function App() {
     oddEvenSort: customTemplate("oddEvenSort"),
     pancakeSort: customTemplate("pancakeSort"),
     quickselect: customTemplate("quickselect"),
+    bitonicSort: customTemplate("bitonicSort"),
     selectionSort: customTemplate("selectionSort"),
     shellSort: customTemplate("shellSort"),
     countingSort: customTemplate("countingSort"),
@@ -435,10 +436,11 @@ function buildRequest(
   }
 
   if (isSortAlgorithm(algorithm)) {
+    const sortInput = algorithm === "bitonicSort" ? normalizeBitonicSortInput(randomSort) : randomSort;
     return {
       algorithm,
       inputMode,
-      input: { type: "sort", value: randomSort },
+      input: { type: "sort", value: sortInput },
       options: optionsForAlgorithm(algorithm),
     };
   }
@@ -495,6 +497,9 @@ function optionsForAlgorithm(algorithm: AvailableAlgorithmId): AlgorithmRequest[
   }
   if (algorithm === "quickselect") {
     return { type: "quickselect", value: {} };
+  }
+  if (algorithm === "bitonicSort") {
+    return { type: "bitonicSort", value: {} };
   }
   if (algorithm === "selectionSort") {
     return { type: "selectionSort", value: {} };
@@ -565,6 +570,7 @@ function isSortAlgorithm(algorithm: AvailableAlgorithmId) {
     algorithm === "oddEvenSort" ||
     algorithm === "pancakeSort" ||
     algorithm === "quickselect" ||
+    algorithm === "bitonicSort" ||
     algorithm === "selectionSort" ||
     algorithm === "shellSort" ||
     algorithm === "countingSort" ||
@@ -575,6 +581,15 @@ function isSortAlgorithm(algorithm: AvailableAlgorithmId) {
     algorithm === "timsort" ||
     algorithm === "heapSort"
   );
+}
+
+function normalizeBitonicSortInput(input: SortInput): SortInput {
+  const size = input.values.length <= 8 ? 8 : input.values.length <= 16 ? 16 : 32;
+  const values = [...input.values];
+  while (values.length < size) {
+    values.push(5 + Math.floor(Math.random() * 96));
+  }
+  return { values: values.slice(0, size) };
 }
 
 function isGraphAlgorithm(algorithm: AvailableAlgorithmId) {

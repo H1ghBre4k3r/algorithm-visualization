@@ -100,6 +100,13 @@ export const algorithms: AlgorithmCatalogItem[] = [
     summary: "Partition around pivots until the requested rank is selected.",
   },
   {
+    id: "bitonicSort",
+    label: "Bitonic Sort",
+    category: "sorting",
+    status: "available",
+    summary: "Run compare-exchange stages through a power-of-two sorting network.",
+  },
+  {
     id: "selectionSort",
     label: "Selection Sort",
     category: "sorting",

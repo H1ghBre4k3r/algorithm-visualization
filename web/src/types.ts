@@ -6,6 +6,7 @@ export type AvailableAlgorithmId =
   | "oddEvenSort"
   | "pancakeSort"
   | "quickselect"
+  | "bitonicSort"
   | "selectionSort"
   | "shellSort"
   | "countingSort"
@@ -53,6 +54,7 @@ export type AlgorithmOptions =
   | { type: "oddEvenSort"; value: OddEvenSortOptions }
   | { type: "pancakeSort"; value: PancakeSortOptions }
   | { type: "quickselect"; value: QuickselectOptions }
+  | { type: "bitonicSort"; value: BitonicSortOptions }
   | { type: "selectionSort"; value: SelectionSortOptions }
   | { type: "shellSort"; value: ShellSortOptions }
   | { type: "countingSort"; value: CountingSortOptions }
@@ -82,6 +84,7 @@ export type CocktailShakerSortOptions = Record<string, never>;
 export type OddEvenSortOptions = Record<string, never>;
 export type PancakeSortOptions = Record<string, never>;
 export type QuickselectOptions = Record<string, never>;
+export type BitonicSortOptions = Record<string, never>;
 export type SelectionSortOptions = Record<string, never>;
 export type ShellSortOptions = Record<string, never>;
 export type CountingSortOptions = Record<string, never>;
