@@ -52,6 +52,7 @@ export default function App() {
   const [customJson, setCustomJson] = useState<Record<AvailableAlgorithmId, string>>({
     quicksort: customTemplate("quicksort"),
     bfs: customTemplate("bfs"),
+    dfs: customTemplate("dfs"),
     dijkstra: customTemplate("dijkstra"),
     primMst: customTemplate("primMst"),
     kmp: customTemplate("kmp"),
@@ -468,6 +469,9 @@ function optionsForAlgorithm(algorithm: AvailableAlgorithmId): AlgorithmRequest[
   if (algorithm === "bfs") {
     return { type: "bfs", value: { stopAtTarget: true } };
   }
+  if (algorithm === "dfs") {
+    return { type: "dfs", value: { stopAtTarget: true } };
+  }
   if (algorithm === "primMst") {
     return { type: "primMst", value: {} };
   }
@@ -481,7 +485,7 @@ function randomControlLabel(algorithm: AvailableAlgorithmId) {
 }
 
 function isGraphAlgorithm(algorithm: AvailableAlgorithmId) {
-  return algorithm === "bfs" || algorithm === "dijkstra" || algorithm === "primMst";
+  return algorithm === "bfs" || algorithm === "dfs" || algorithm === "dijkstra" || algorithm === "primMst";
 }
 
 function VisualizationCanvas({ trace, step }: { trace: Trace; step: number }) {

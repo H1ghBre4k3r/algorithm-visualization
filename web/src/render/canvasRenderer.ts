@@ -42,7 +42,10 @@ export function drawTrace(canvas: HTMLCanvasElement, trace: Trace, step: number)
   }
 
   if (
-    (trace.algorithm === "bfs" || trace.algorithm === "dijkstra" || trace.algorithm === "primMst") &&
+    (trace.algorithm === "bfs" ||
+      trace.algorithm === "dfs" ||
+      trace.algorithm === "dijkstra" ||
+      trace.algorithm === "primMst") &&
     trace.initialState.type === "graph"
   ) {
     drawGraphTrace(context, width, height, trace, step);

@@ -25,6 +25,11 @@ export function generateTraceFallback(request: AlgorithmRequest): Trace {
     return traceBfs(request.input.value, stopAtTarget);
   }
 
+  if (request.algorithm === "dfs" && request.input.type === "graph") {
+    const stopAtTarget = request.options?.type === "dfs" ? request.options.value.stopAtTarget : true;
+    return traceDfs(request.input.value, stopAtTarget);
+  }
+
   if (request.algorithm === "primMst" && request.input.type === "graph") {
     return tracePrimMst(request.input.value);
   }
@@ -306,6 +311,157 @@ function traceBfs(input: GraphInput, stopAtTarget: boolean): Trace {
         totalDistance === null
           ? "No reachable target path found."
           : `Shortest unweighted path has ${totalDistance} edges.`,
+    },
+  };
+}
+
+function traceDfs(input: GraphInput, stopAtTarget: boolean): Trace {
+  validateGraph(input);
+
+  const nodeOrder = input.nodes.map((node) => node.id);
+  const adjacency = buildAdjacency(input.edges);
+  const distances = new Map<string, number | null>(nodeOrder.map((node) => [node, null]));
+  const previous = new Map<string, string>();
+  const visited = new Set<string>();
+  const stack: Array<[string, number]> = [[input.source, 0]];
+  const events: TraceEvent[] = [];
+
+  distances.set(input.source, 0);
+
+  while (stack.length > 0) {
+    const [node, depth] = stack.pop() as [string, number];
+    if (visited.has(node)) {
+      continue;
+    }
+
+    visited.add(node);
+    distances.set(node, depth);
+    events.push({
+      type: "graphVisit",
+      node,
+      distance: depth,
+      message: `Visit node ${node} at depth-first depth ${depth}.`,
+    });
+
+    if (stopAtTarget && input.target === node) {
+      events.push({
+        type: "graphSettle",
+        node,
+        distance: depth,
+        message: `Reached target node ${node}.`,
+      });
+      break;
+    }
+
+    const edges = adjacency.get(node) ?? [];
+    for (const edge of edges) {
+      events.push({
+        type: "graphConsiderEdge",
+        edgeId: edge.edgeId,
+        from: node,
+        to: edge.to,
+        weight: edge.weight,
+        message: `Inspect edge ${edge.edgeId} from ${node} to ${edge.to}.`,
+      });
+    }
+
+    for (const edge of [...edges].reverse()) {
+      if (visited.has(edge.to) || stack.some(([queued]) => queued === edge.to)) {
+        const previousDistance = distances.get(edge.to) ?? null;
+        events.push({
+          type: "graphRelaxEdge",
+          edgeId: edge.edgeId,
+          from: node,
+          to: edge.to,
+          weight: edge.weight,
+          previousDistance,
+          newDistance: previousDistance,
+          improved: false,
+          message: `${edge.to} is already scheduled or visited.`,
+        });
+        continue;
+      }
+
+      const nextDepth = depth + 1;
+      distances.set(edge.to, nextDepth);
+      previous.set(edge.to, node);
+      stack.push([edge.to, nextDepth]);
+      events.push({
+        type: "graphRelaxEdge",
+        edgeId: edge.edgeId,
+        from: node,
+        to: edge.to,
+        weight: edge.weight,
+        previousDistance: null,
+        newDistance: nextDepth,
+        improved: true,
+        message: `Push ${edge.to} onto the DFS stack at depth ${nextDepth}.`,
+      });
+    }
+
+    events.push({
+      type: "graphSettle",
+      node,
+      distance: depth,
+      message: `Finish node ${node}.`,
+    });
+  }
+
+  const [path, totalDistance] = input.target
+    ? reconstructPath(input.source, input.target, previous, distances)
+    : [[], null];
+
+  if (input.target) {
+    events.push({
+      type: "graphPath",
+      nodes: path,
+      totalDistance,
+      message:
+        totalDistance === null
+          ? "No path reaches the selected target."
+          : `Depth-first target path has ${totalDistance} edges.`,
+    });
+  }
+
+  const initialDistances = nodeOrder.map<NodeDistance>((node) => ({
+    node,
+    distance: node === input.source ? 0 : null,
+  }));
+  const finalDistances = nodeOrder.map<NodeDistance>((node) => ({
+    node,
+    distance: distances.get(node) ?? null,
+  }));
+
+  return {
+    algorithm: "dfs",
+    initialState: {
+      type: "graph",
+      nodes: input.nodes,
+      edges: input.edges,
+      source: input.source,
+      target: input.target ?? null,
+      distances: initialDistances,
+      path: [],
+    },
+    finalState: {
+      type: "graph",
+      nodes: input.nodes,
+      edges: input.edges,
+      source: input.source,
+      target: input.target ?? null,
+      distances: finalDistances,
+      path,
+    },
+    events,
+    metadata: {
+      algorithmName: "Depth-First Search",
+      category: "Graph",
+      inputSize: input.nodes.length,
+      eventCount: events.length,
+      resultSummary:
+        totalDistance === null
+          ? "No reachable target path found."
+          : `Depth-first target path has ${totalDistance} edges.`,
     },
   };
 }

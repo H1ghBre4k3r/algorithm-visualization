@@ -38,6 +38,7 @@ Reference: https://impeccable.style
   - Target: orange.
   - Active frontier: amber.
   - Discovered traversal depth: blue labels.
+  - Depth-first stack operations: amber edge focus with blue depth labels.
   - Final path or selected tree edges: green.
 - Sequence:
   - Active comparison: amber.

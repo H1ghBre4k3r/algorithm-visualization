@@ -65,6 +65,13 @@ export const algorithms: AlgorithmCatalogItem[] = [
     summary: "Explore neighbors by layers to find unweighted shortest paths.",
   },
   {
+    id: "dfs",
+    label: "Depth-First Search",
+    category: "graph",
+    status: "available",
+    summary: "Follow one branch deeply before backtracking through the graph.",
+  },
+  {
     id: "dijkstra",
     label: "Dijkstra",
     category: "graph",

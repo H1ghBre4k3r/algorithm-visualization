@@ -17,6 +17,7 @@ pub fn example_request_for(algorithm: &str) -> Result<JsValue, JsValue> {
     let algorithm = match algorithm {
         "quicksort" => AlgorithmId::Quicksort,
         "bfs" => AlgorithmId::Bfs,
+        "dfs" => AlgorithmId::Dfs,
         "dijkstra" => AlgorithmId::Dijkstra,
         "primMst" => AlgorithmId::PrimMst,
         "kmp" => AlgorithmId::Kmp,

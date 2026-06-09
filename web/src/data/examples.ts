@@ -66,12 +66,15 @@ export function exampleRequest(algorithm: AvailableAlgorithmId): AlgorithmReques
     };
   }
 
-  if (algorithm === "bfs") {
+  if (algorithm === "bfs" || algorithm === "dfs") {
     return {
       algorithm,
       inputMode: "example",
       input: { type: "graph", value: structuredClone(exampleGraphInput) },
-      options: { type: "bfs", value: { stopAtTarget: true } },
+      options:
+        algorithm === "bfs"
+          ? { type: "bfs", value: { stopAtTarget: true } }
+          : { type: "dfs", value: { stopAtTarget: true } },
     };
   }
 
