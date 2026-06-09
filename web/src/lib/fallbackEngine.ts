@@ -3,6 +3,7 @@ import type {
   GraphEdge,
   GraphInput,
   NodeDistance,
+  SequenceInput,
   SortInput,
   Trace,
   TraceEvent,
@@ -17,6 +18,10 @@ export function generateTraceFallback(request: AlgorithmRequest): Trace {
     const stopAtTarget =
       request.options?.type === "dijkstra" ? request.options.value.stopAtTarget : true;
     return traceDijkstra(request.input.value, stopAtTarget);
+  }
+
+  if (request.algorithm === "kmp" && request.input.type === "sequence") {
+    return traceKmp(request.input.value);
   }
 
   throw new Error("Algorithm and input type do not match.");
@@ -271,6 +276,142 @@ function traceDijkstra(input: GraphInput, stopAtTarget: boolean): Trace {
   };
 }
 
+function traceKmp(input: SequenceInput): Trace {
+  validateSequence(input);
+
+  const text = Array.from(input.text);
+  const pattern = Array.from(input.pattern);
+  const events: TraceEvent[] = [];
+  const lps = buildLpsTrace(pattern, events);
+  const matches: number[] = [];
+  let textIndex = 0;
+  let patternIndex = 0;
+
+  while (textIndex < text.length) {
+    const matched = text[textIndex] === pattern[patternIndex];
+    events.push({
+      type: "sequenceCompare",
+      textIndex,
+      patternIndex,
+      matched,
+      message: `Compare text[${textIndex}] '${text[textIndex]}' with pattern[${patternIndex}] '${pattern[patternIndex]}'.`,
+    });
+
+    if (matched) {
+      textIndex += 1;
+      patternIndex += 1;
+
+      if (patternIndex === pattern.length) {
+        const startIndex = textIndex - pattern.length;
+        const endIndex = textIndex - 1;
+        matches.push(startIndex);
+        events.push({
+          type: "sequenceMatch",
+          startIndex,
+          endIndex,
+          message: `Pattern found at text index ${startIndex}.`,
+        });
+        const fallback = lps[patternIndex - 1];
+        events.push({
+          type: "sequenceFallback",
+          fromPatternIndex: patternIndex,
+          toPatternIndex: fallback,
+          message: `Resume from prefix length ${fallback}.`,
+        });
+        patternIndex = fallback;
+      }
+    } else if (patternIndex !== 0) {
+      const fallback = lps[patternIndex - 1];
+      events.push({
+        type: "sequenceFallback",
+        fromPatternIndex: patternIndex,
+        toPatternIndex: fallback,
+        message: `Mismatch: fall back from pattern index ${patternIndex} to ${fallback}.`,
+      });
+      patternIndex = fallback;
+    } else {
+      textIndex += 1;
+    }
+  }
+
+  return {
+    algorithm: "kmp",
+    initialState: {
+      type: "sequence",
+      text: input.text,
+      pattern: input.pattern,
+      lps: Array(pattern.length).fill(0),
+      matches: [],
+    },
+    finalState: {
+      type: "sequence",
+      text: input.text,
+      pattern: input.pattern,
+      lps,
+      matches,
+    },
+    events,
+    metadata: {
+      algorithmName: "Knuth-Morris-Pratt",
+      category: "Sequence",
+      inputSize: text.length,
+      eventCount: events.length,
+      resultSummary:
+        matches.length === 0 ? "No pattern matches found." : `Found ${matches.length} pattern match(es).`,
+    },
+  };
+}
+
+function buildLpsTrace(pattern: string[], events: TraceEvent[]) {
+  const lps = Array(pattern.length).fill(0);
+  let prefixIndex = 0;
+  let patternIndex = 1;
+
+  while (patternIndex < pattern.length) {
+    events.push({
+      type: "sequenceBuildPrefix",
+      patternIndex,
+      prefixIndex,
+      lps: [...lps],
+      message: `Build prefix: compare pattern[${patternIndex}] with pattern[${prefixIndex}].`,
+    });
+
+    if (pattern[patternIndex] === pattern[prefixIndex]) {
+      prefixIndex += 1;
+      lps[patternIndex] = prefixIndex;
+      events.push({
+        type: "sequenceBuildPrefix",
+        patternIndex,
+        prefixIndex,
+        lps: [...lps],
+        message: `Set lps[${patternIndex}] to ${prefixIndex}.`,
+      });
+      patternIndex += 1;
+    } else if (prefixIndex !== 0) {
+      const fallback = lps[prefixIndex - 1];
+      events.push({
+        type: "sequenceFallback",
+        fromPatternIndex: prefixIndex,
+        toPatternIndex: fallback,
+        message: `Prefix mismatch: fall back to prefix length ${fallback}.`,
+      });
+      prefixIndex = fallback;
+    } else {
+      lps[patternIndex] = 0;
+      events.push({
+        type: "sequenceBuildPrefix",
+        patternIndex,
+        prefixIndex,
+        lps: [...lps],
+        message: `Set lps[${patternIndex}] to 0.`,
+      });
+      patternIndex += 1;
+    }
+  }
+
+  return lps;
+}
+
 interface AdjacentEdge {
   edgeId: string;
   to: string;
@@ -364,6 +505,27 @@ function validateGraph(input: GraphInput) {
     if (!nodes.has(edge.from) || !nodes.has(edge.to)) {
       throw new Error(`Edge '${edge.id}' references an unknown node.`);
     }
+  }
+}
+
+function validateSequence(input: SequenceInput) {
+  const textLength = Array.from(input.text).length;
+  const patternLength = Array.from(input.pattern).length;
+
+  if (textLength === 0) {
+    throw new Error("KMP text cannot be empty.");
+  }
+  if (patternLength === 0) {
+    throw new Error("KMP pattern cannot be empty.");
+  }
+  if (patternLength > textLength) {
+    throw new Error("KMP pattern cannot be longer than the text.");
+  }
+  if (textLength > 160) {
+    throw new Error("KMP text is capped at 160 characters for interactive playback.");
+  }
+  if (patternLength > 48) {
+    throw new Error("KMP pattern is capped at 48 characters for interactive playback.");
   }
 }
 

@@ -6,6 +6,7 @@ Browser-first algorithm visualization MVP with a Rust trace core, WASM bindings,
 
 - Quicksort trace generation and animated bar visualization.
 - Dijkstra trace generation and animated weighted-graph visualization.
+- Knuth-Morris-Pratt trace generation and sequence/prefix-table visualization.
 - Example, random, and custom JSON inputs.
 - Playback controls for play, pause, step, reset, and speed.
 - Rust unit tests for algorithm correctness and trace shape.

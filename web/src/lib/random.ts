@@ -1,4 +1,4 @@
-import type { GraphInput, SortInput } from "../types";
+import type { GraphInput, SequenceInput, SortInput } from "../types";
 
 export function randomSortInput(size: number): SortInput {
   return {
@@ -50,5 +50,26 @@ export function randomGraphInput(size: number): GraphInput {
     edges,
     source: nodes[0].id,
     target: nodes[nodes.length - 1].id,
+  };
+}
+
+export function randomSequenceInput(size: number): SequenceInput {
+  const alphabet = ["a", "b", "c", "d"];
+  const patternLength = Math.max(3, Math.min(8, Math.floor(size / 4)));
+  const textLength = Math.max(patternLength + 4, Math.min(80, size));
+  const pattern = Array.from(
+    { length: patternLength },
+    () => alphabet[Math.floor(Math.random() * alphabet.length)],
+  ).join("");
+  const insertAt = Math.floor(Math.random() * (textLength - patternLength));
+  const textChars = Array.from(
+    { length: textLength },
+    () => alphabet[Math.floor(Math.random() * alphabet.length)],
+  );
+  textChars.splice(insertAt, patternLength, ...pattern);
+
+  return {
+    text: textChars.join(""),
+    pattern,
   };
 }

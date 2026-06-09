@@ -38,3 +38,8 @@ Reference: https://impeccable.style
   - Target: orange.
   - Active frontier: amber.
   - Final path: green.
+- Sequence:
+  - Active comparison: amber.
+  - Mismatch/fallback: red.
+  - Prefix table focus: violet.
+  - Final matches: green.

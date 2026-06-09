@@ -68,7 +68,7 @@ export const algorithms: AlgorithmCatalogItem[] = [
     id: "kmp",
     label: "Knuth-Morris-Pratt",
     category: "sequence",
-    status: "planned",
+    status: "available",
     summary: "Build a prefix table and scan text without rewinding.",
   },
   {

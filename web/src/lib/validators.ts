@@ -1,4 +1,12 @@
-import type { AvailableAlgorithmId, GraphEdge, GraphInput, GraphNode, InputData, SortInput } from "../types";
+import type {
+  AvailableAlgorithmId,
+  GraphEdge,
+  GraphInput,
+  GraphNode,
+  InputData,
+  SequenceInput,
+  SortInput,
+} from "../types";
 
 export class InputValidationError extends Error {
   constructor(message: string) {
@@ -8,9 +16,13 @@ export class InputValidationError extends Error {
 }
 
 export function parseCustomInput(algorithm: AvailableAlgorithmId, raw: string): InputData {
-  return algorithm === "quicksort"
-    ? { type: "sort", value: parseSortInput(raw) }
-    : { type: "graph", value: parseGraphInput(raw) };
+  if (algorithm === "quicksort") {
+    return { type: "sort", value: parseSortInput(raw) };
+  }
+  if (algorithm === "kmp") {
+    return { type: "sequence", value: parseSequenceInput(raw) };
+  }
+  return { type: "graph", value: parseGraphInput(raw) };
 }
 
 export function parseSortInput(raw: string): SortInput {
@@ -78,6 +90,26 @@ export function parseGraphInput(raw: string): GraphInput {
     source,
     target,
   };
+}
+
+export function parseSequenceInput(raw: string): SequenceInput {
+  const parsed = readRecord(parseJson(raw));
+  const text = readString(parsed.text, "KMP text");
+  const pattern = readString(parsed.pattern, "KMP pattern");
+  const textLength = Array.from(text).length;
+  const patternLength = Array.from(pattern).length;
+
+  if (patternLength > textLength) {
+    throw new InputValidationError("KMP pattern cannot be longer than the text.");
+  }
+  if (textLength > 160) {
+    throw new InputValidationError("KMP text supports up to 160 characters.");
+  }
+  if (patternLength > 48) {
+    throw new InputValidationError("KMP pattern supports up to 48 characters.");
+  }
+
+  return { text, pattern };
 }
 
 function parseNode(value: unknown, index: number): GraphNode {

@@ -44,6 +44,10 @@ export function drawTrace(canvas: HTMLCanvasElement, trace: Trace, step: number)
   if (trace.algorithm === "dijkstra" && trace.initialState.type === "graph") {
     drawGraphTrace(context, width, height, trace, step);
   }
+
+  if (trace.algorithm === "kmp" && trace.initialState.type === "sequence") {
+    drawSequenceTrace(context, width, height, trace, step);
+  }
 }
 
 function drawBackground(context: CanvasRenderingContext2D, width: number, height: number) {
@@ -360,6 +364,189 @@ function isPathEdge(edge: GraphEdge, path: string[]) {
     if (!edge.directed && edge.from === to && edge.to === from) return true;
   }
   return false;
+}
+
+function drawSequenceTrace(
+  context: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  trace: Trace,
+  step: number,
+) {
+  if (trace.initialState.type !== "sequence") {
+    return;
+  }
+
+  const frame = deriveSequenceFrame(trace, step);
+  const state = trace.initialState;
+  const textChars = Array.from(state.text);
+  const patternChars = Array.from(state.pattern);
+  const paddingX = 38;
+  const cellGap = 4;
+  const maxCells = Math.max(textChars.length, patternChars.length, frame.lps.length);
+  const cellSize = Math.max(22, Math.min(42, (width - paddingX * 2 - cellGap * (maxCells - 1)) / maxCells));
+  const startY = Math.max(28, height * 0.16);
+
+  drawSequenceRow(context, {
+    label: "Text",
+    chars: textChars,
+    x: paddingX,
+    y: startY,
+    cellSize,
+    cellGap,
+    activeIndex: frame.textIndex,
+    matchedIndices: frame.matches.flatMap((match) =>
+      Array.from({ length: patternChars.length }, (_, index) => match + index),
+    ),
+  });
+
+  drawSequenceRow(context, {
+    label: "Pattern",
+    chars: patternChars,
+    x: paddingX,
+    y: startY + cellSize + 58,
+    cellSize,
+    cellGap,
+    activeIndex: frame.patternIndex,
+    matchedIndices: [],
+  });
+
+  drawLpsRow(context, frame.lps, paddingX, startY + (cellSize + 58) * 2, cellSize, cellGap, frame.prefixIndex);
+
+  if (frame.textIndex !== null && frame.patternIndex !== null) {
+    const textX = paddingX + frame.textIndex * (cellSize + cellGap) + cellSize / 2;
+    const patternX = paddingX + frame.patternIndex * (cellSize + cellGap) + cellSize / 2;
+    const textY = startY + cellSize + 10;
+    const patternY = startY + cellSize + 48;
+    context.strokeStyle = frame.lastMatched === false ? palette.swap : palette.path;
+    context.lineWidth = 2;
+    context.beginPath();
+    context.moveTo(textX, textY);
+    context.lineTo(patternX, patternY);
+    context.stroke();
+  }
+}
+
+interface SequenceFrame {
+  lps: number[];
+  textIndex: number | null;
+  patternIndex: number | null;
+  prefixIndex: number | null;
+  matches: number[];
+  lastMatched: boolean | null;
+}
+
+function deriveSequenceFrame(trace: Trace, step: number): SequenceFrame {
+  const lps = trace.initialState.type === "sequence" ? [...trace.initialState.lps] : [];
+  let textIndex: number | null = null;
+  let patternIndex: number | null = null;
+  let prefixIndex: number | null = null;
+  let lastMatched: boolean | null = null;
+  const matches: number[] = [];
+
+  for (let index = 0; index < Math.min(step, trace.events.length); index += 1) {
+    const event = trace.events[index];
+
+    if (event.type === "sequenceBuildPrefix") {
+      lps.splice(0, lps.length, ...event.lps);
+      patternIndex = event.patternIndex;
+      prefixIndex = event.prefixIndex;
+      textIndex = null;
+      lastMatched = null;
+    }
+    if (event.type === "sequenceCompare") {
+      textIndex = event.textIndex;
+      patternIndex = event.patternIndex;
+      prefixIndex = null;
+      lastMatched = event.matched;
+    }
+    if (event.type === "sequenceFallback") {
+      patternIndex = event.toPatternIndex;
+      prefixIndex = event.toPatternIndex;
+      lastMatched = false;
+    }
+    if (event.type === "sequenceMatch") {
+      matches.push(event.startIndex);
+      textIndex = event.endIndex;
+      patternIndex = null;
+      prefixIndex = null;
+      lastMatched = true;
+    }
+  }
+
+  return { lps, textIndex, patternIndex, prefixIndex, matches, lastMatched };
+}
+
+function drawSequenceRow(
+  context: CanvasRenderingContext2D,
+  options: {
+    label: string;
+    chars: string[];
+    x: number;
+    y: number;
+    cellSize: number;
+    cellGap: number;
+    activeIndex: number | null;
+    matchedIndices: number[];
+  },
+) {
+  context.fillStyle = palette.muted;
+  context.font = "700 12px Inter, system-ui, sans-serif";
+  context.textAlign = "left";
+  context.textBaseline = "middle";
+  context.fillText(options.label, options.x, options.y - 18);
+
+  const matched = new Set(options.matchedIndices);
+  options.chars.forEach((char, index) => {
+    const x = options.x + index * (options.cellSize + options.cellGap);
+    const isActive = options.activeIndex === index;
+    const isMatched = matched.has(index);
+    context.fillStyle = isActive ? palette.active : isMatched ? "rgba(67, 170, 139, 0.22)" : "#ffffff";
+    context.strokeStyle = isActive ? palette.ink : isMatched ? palette.path : "rgba(47, 64, 95, 0.24)";
+    context.lineWidth = isActive ? 2 : 1;
+    roundedRect(context, x, options.y, options.cellSize, options.cellSize, 6);
+    context.fill();
+    context.stroke();
+
+    context.fillStyle = palette.ink;
+    context.font = "700 15px Inter, system-ui, sans-serif";
+    context.textAlign = "center";
+    context.textBaseline = "middle";
+    context.fillText(char, x + options.cellSize / 2, options.y + options.cellSize / 2);
+  });
+}
+
+function drawLpsRow(
+  context: CanvasRenderingContext2D,
+  lps: number[],
+  x: number,
+  y: number,
+  cellSize: number,
+  cellGap: number,
+  activeIndex: number | null,
+) {
+  context.fillStyle = palette.muted;
+  context.font = "700 12px Inter, system-ui, sans-serif";
+  context.textAlign = "left";
+  context.textBaseline = "middle";
+  context.fillText("LPS", x, y - 18);
+
+  lps.forEach((value, index) => {
+    const cellX = x + index * (cellSize + cellGap);
+    const isActive = activeIndex === index;
+    context.fillStyle = isActive ? "rgba(155, 93, 229, 0.16)" : "#ffffff";
+    context.strokeStyle = isActive ? palette.pivot : "rgba(47, 64, 95, 0.24)";
+    context.lineWidth = isActive ? 2 : 1;
+    roundedRect(context, cellX, y, cellSize, cellSize, 6);
+    context.fill();
+    context.stroke();
+
+    context.fillStyle = palette.ink;
+    context.font = "700 14px Inter, system-ui, sans-serif";
+    context.textAlign = "center";
+    context.textBaseline = "middle";
+    context.fillText(String(value), cellX + cellSize / 2, y + cellSize / 2);
+  });
 }
 
 function drawArrowHead(

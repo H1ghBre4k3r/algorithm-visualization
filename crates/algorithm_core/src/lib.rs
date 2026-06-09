@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 pub enum AlgorithmId {
     Quicksort,
     Dijkstra,
+    Kmp,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -33,6 +34,7 @@ pub struct AlgorithmRequest {
 pub enum InputData {
     Sort(SortInput),
     Graph(GraphInput),
+    Sequence(SequenceInput),
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -40,6 +42,7 @@ pub enum InputData {
 pub enum AlgorithmOptions {
     Quicksort(QuicksortOptions),
     Dijkstra(DijkstraOptions),
+    Kmp(KmpOptions),
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -59,6 +62,10 @@ pub struct DijkstraOptions {
     #[serde(default)]
     pub stop_at_target: bool,
 }
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct KmpOptions {}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -98,6 +105,13 @@ pub struct GraphEdge {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct SequenceInput {
+    pub text: String,
+    pub pattern: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Trace {
     pub algorithm: AlgorithmId,
     pub initial_state: VisualizationState,
@@ -119,6 +133,12 @@ pub enum VisualizationState {
         target: Option<String>,
         distances: Vec<NodeDistance>,
         path: Vec<String>,
+    },
+    Sequence {
+        text: String,
+        pattern: String,
+        lps: Vec<usize>,
+        matches: Vec<usize>,
     },
 }
 
@@ -196,6 +216,28 @@ pub enum TraceEvent {
         total_distance: Option<u32>,
         message: String,
     },
+    SequenceBuildPrefix {
+        pattern_index: usize,
+        prefix_index: usize,
+        lps: Vec<usize>,
+        message: String,
+    },
+    SequenceCompare {
+        text_index: usize,
+        pattern_index: usize,
+        matched: bool,
+        message: String,
+    },
+    SequenceFallback {
+        from_pattern_index: usize,
+        to_pattern_index: usize,
+        message: String,
+    },
+    SequenceMatch {
+        start_index: usize,
+        end_index: usize,
+        message: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -233,11 +275,15 @@ pub fn generate_trace(request: AlgorithmRequest) -> Result<Trace, AlgorithmError
             };
             trace_dijkstra(input, stop_at_target)
         }
+        (AlgorithmId::Kmp, InputData::Sequence(input)) => trace_kmp(input),
         (AlgorithmId::Quicksort, _) => Err(AlgorithmError::new(
             "Quicksort requires sort input with a values array.",
         )),
         (AlgorithmId::Dijkstra, _) => Err(AlgorithmError::new(
             "Dijkstra requires graph input with nodes, edges, source, and target.",
+        )),
+        (AlgorithmId::Kmp, _) => Err(AlgorithmError::new(
+            "Knuth-Morris-Pratt requires sequence input with text and pattern.",
         )),
     }
 }
@@ -261,6 +307,15 @@ pub fn example_request(algorithm: AlgorithmId) -> AlgorithmRequest {
             options: Some(AlgorithmOptions::Dijkstra(DijkstraOptions {
                 stop_at_target: true,
             })),
+        },
+        AlgorithmId::Kmp => AlgorithmRequest {
+            algorithm,
+            input_mode: InputMode::Example,
+            input: InputData::Sequence(SequenceInput {
+                text: "ababcabcabababd".to_string(),
+                pattern: "ababd".to_string(),
+            }),
+            options: Some(AlgorithmOptions::Kmp(KmpOptions::default())),
         },
     }
 }
@@ -537,6 +592,172 @@ pub fn trace_dijkstra(input: GraphInput, stop_at_target: bool) -> Result<Trace, 
     })
 }
 
+pub fn trace_kmp(input: SequenceInput) -> Result<Trace, AlgorithmError> {
+    validate_sequence(&input)?;
+
+    let text = input.text;
+    let pattern = input.pattern;
+    let text_chars = text.chars().collect::<Vec<_>>();
+    let pattern_chars = pattern.chars().collect::<Vec<_>>();
+    let mut events = Vec::new();
+    let lps = build_lps_trace(&pattern_chars, &mut events);
+    let mut matches = Vec::new();
+    let mut text_index = 0;
+    let mut pattern_index = 0;
+
+    while text_index < text_chars.len() {
+        let matched = text_chars[text_index] == pattern_chars[pattern_index];
+        events.push(TraceEvent::SequenceCompare {
+            text_index,
+            pattern_index,
+            matched,
+            message: format!(
+                "Compare text[{}] '{}' with pattern[{}] '{}'.",
+                text_index, text_chars[text_index], pattern_index, pattern_chars[pattern_index]
+            ),
+        });
+
+        if matched {
+            text_index += 1;
+            pattern_index += 1;
+
+            if pattern_index == pattern_chars.len() {
+                let start_index = text_index - pattern_chars.len();
+                let end_index = text_index - 1;
+                matches.push(start_index);
+                events.push(TraceEvent::SequenceMatch {
+                    start_index,
+                    end_index,
+                    message: format!("Pattern found at text index {start_index}."),
+                });
+                let fallback = lps[pattern_index - 1];
+                events.push(TraceEvent::SequenceFallback {
+                    from_pattern_index: pattern_index,
+                    to_pattern_index: fallback,
+                    message: format!("Resume from prefix length {fallback}."),
+                });
+                pattern_index = fallback;
+            }
+        } else if pattern_index != 0 {
+            let fallback = lps[pattern_index - 1];
+            events.push(TraceEvent::SequenceFallback {
+                from_pattern_index: pattern_index,
+                to_pattern_index: fallback,
+                message: format!(
+                    "Mismatch: fall back from pattern index {pattern_index} to {fallback}."
+                ),
+            });
+            pattern_index = fallback;
+        } else {
+            text_index += 1;
+        }
+    }
+
+    let metadata = TraceMetadata {
+        algorithm_name: "Knuth-Morris-Pratt".to_string(),
+        category: "Sequence".to_string(),
+        input_size: text_chars.len(),
+        event_count: events.len(),
+        result_summary: if matches.is_empty() {
+            "No pattern matches found.".to_string()
+        } else {
+            format!("Found {} pattern match(es).", matches.len())
+        },
+    };
+
+    Ok(Trace {
+        algorithm: AlgorithmId::Kmp,
+        initial_state: VisualizationState::Sequence {
+            text: text.clone(),
+            pattern: pattern.clone(),
+            lps: vec![0; pattern_chars.len()],
+            matches: Vec::new(),
+        },
+        final_state: VisualizationState::Sequence {
+            text,
+            pattern,
+            lps,
+            matches,
+        },
+        events,
+        metadata,
+    })
+}
+
+fn build_lps_trace(pattern: &[char], events: &mut Vec<TraceEvent>) -> Vec<usize> {
+    let mut lps = vec![0; pattern.len()];
+    let mut prefix_index = 0;
+    let mut pattern_index = 1;
+
+    while pattern_index < pattern.len() {
+        events.push(TraceEvent::SequenceBuildPrefix {
+            pattern_index,
+            prefix_index,
+            lps: lps.clone(),
+            message: format!(
+                "Build prefix: compare pattern[{pattern_index}] with pattern[{prefix_index}]."
+            ),
+        });
+
+        if pattern[pattern_index] == pattern[prefix_index] {
+            prefix_index += 1;
+            lps[pattern_index] = prefix_index;
+            events.push(TraceEvent::SequenceBuildPrefix {
+                pattern_index,
+                prefix_index,
+                lps: lps.clone(),
+                message: format!("Set lps[{pattern_index}] to {prefix_index}."),
+            });
+            pattern_index += 1;
+        } else if prefix_index != 0 {
+            let fallback = lps[prefix_index - 1];
+            events.push(TraceEvent::SequenceFallback {
+                from_pattern_index: prefix_index,
+                to_pattern_index: fallback,
+                message: format!("Prefix mismatch: fall back to prefix length {fallback}."),
+            });
+            prefix_index = fallback;
+        } else {
+            lps[pattern_index] = 0;
+            events.push(TraceEvent::SequenceBuildPrefix {
+                pattern_index,
+                prefix_index,
+                lps: lps.clone(),
+                message: format!("Set lps[{pattern_index}] to 0."),
+            });
+            pattern_index += 1;
+        }
+    }
+
+    lps
+}
+
+fn validate_sequence(input: &SequenceInput) -> Result<(), AlgorithmError> {
+    if input.text.is_empty() {
+        return Err(AlgorithmError::new("KMP text cannot be empty."));
+    }
+    if input.pattern.is_empty() {
+        return Err(AlgorithmError::new("KMP pattern cannot be empty."));
+    }
+    if input.pattern.chars().count() > input.text.chars().count() {
+        return Err(AlgorithmError::new(
+            "KMP pattern cannot be longer than the text.",
+        ));
+    }
+    if input.text.chars().count() > 160 {
+        return Err(AlgorithmError::new(
+            "KMP text is capped at 160 characters for interactive playback.",
+        ));
+    }
+    if input.pattern.chars().count() > 48 {
+        return Err(AlgorithmError::new(
+            "KMP pattern is capped at 48 characters for interactive playback.",
+        ));
+    }
+
+    Ok(())
+}
+
 #[derive(Debug, Clone)]
 struct AdjacencyEdge {
     edge_id: String,
@@ -811,12 +1032,48 @@ mod tests {
     }
 
     #[test]
+    fn kmp_trace_finds_pattern_matches() {
+        let trace = trace_kmp(SequenceInput {
+            text: "ababcabcabababd".to_string(),
+            pattern: "ababd".to_string(),
+        })
+        .expect("trace");
+
+        assert_eq!(
+            trace.final_state,
+            VisualizationState::Sequence {
+                text: "ababcabcabababd".to_string(),
+                pattern: "ababd".to_string(),
+                lps: vec![0, 0, 1, 2, 0],
+                matches: vec![10],
+            }
+        );
+        assert_valid_sequence_trace(&trace);
+    }
+
+    #[test]
+    fn kmp_rejects_empty_pattern() {
+        let error = trace_kmp(SequenceInput {
+            text: "abc".to_string(),
+            pattern: String::new(),
+        })
+        .expect_err("invalid sequence input");
+
+        assert!(error.message().contains("pattern"));
+    }
+
+    #[test]
     fn example_requests_generate_valid_traces() {
-        for algorithm in [AlgorithmId::Quicksort, AlgorithmId::Dijkstra] {
+        for algorithm in [
+            AlgorithmId::Quicksort,
+            AlgorithmId::Dijkstra,
+            AlgorithmId::Kmp,
+        ] {
             let trace = generate_trace(example_request(algorithm)).expect("trace");
             match algorithm {
                 AlgorithmId::Quicksort => assert_valid_sort_trace(&trace),
                 AlgorithmId::Dijkstra => assert_valid_graph_trace(&trace),
+                AlgorithmId::Kmp => assert_valid_sequence_trace(&trace),
             }
         }
     }
@@ -919,6 +1176,83 @@ mod tests {
                 }
                 _ => panic!("graph trace contains non-graph event: {event:?}"),
             }
+        }
+    }
+
+    fn assert_valid_sequence_trace(trace: &Trace) {
+        let VisualizationState::Sequence { text, pattern, .. } = &trace.initial_state else {
+            panic!("sequence trace must start with a sequence state");
+        };
+        assert_eq!(trace.algorithm, AlgorithmId::Kmp);
+        assert_eq!(trace.metadata.event_count, trace.events.len());
+
+        let text_len = text.chars().count();
+        let pattern_len = pattern.chars().count();
+        assert!(text_len > 0);
+        assert!(pattern_len > 0);
+
+        for event in &trace.events {
+            match event {
+                TraceEvent::SequenceBuildPrefix {
+                    pattern_index,
+                    prefix_index,
+                    lps,
+                    ..
+                } => {
+                    assert!(*pattern_index < pattern_len);
+                    assert!(*prefix_index <= pattern_len);
+                    assert_eq!(lps.len(), pattern_len);
+                    for (index, value) in lps.iter().enumerate() {
+                        assert!(*value <= index);
+                    }
+                }
+                TraceEvent::SequenceCompare {
+                    text_index,
+                    pattern_index,
+                    ..
+                } => {
+                    assert!(*text_index < text_len);
+                    assert!(*pattern_index < pattern_len);
+                }
+                TraceEvent::SequenceFallback {
+                    from_pattern_index,
+                    to_pattern_index,
+                    ..
+                } => {
+                    assert!(*from_pattern_index <= pattern_len);
+                    assert!(*to_pattern_index < pattern_len || *to_pattern_index == 0);
+                    assert!(*to_pattern_index <= *from_pattern_index);
+                }
+                TraceEvent::SequenceMatch {
+                    start_index,
+                    end_index,
+                    ..
+                } => {
+                    assert!(*start_index <= *end_index);
+                    assert!(*end_index < text_len);
+                    assert_eq!(*end_index - *start_index + 1, pattern_len);
+                }
+                _ => panic!("sequence trace contains non-sequence event: {event:?}"),
+            }
+        }
+
+        let VisualizationState::Sequence {
+            lps,
+            matches,
+            text,
+            pattern,
+        } = &trace.final_state
+        else {
+            panic!("sequence trace must finish with a sequence state");
+        };
+        assert_eq!(lps.len(), pattern_len);
+        for start_index in matches {
+            let candidate = text
+                .chars()
+                .skip(*start_index)
+                .take(pattern_len)
+                .collect::<String>();
+            assert_eq!(candidate, *pattern);
         }
     }
 }

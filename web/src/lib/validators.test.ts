@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { parseGraphInput, parseSortInput } from "./validators";
+import { parseGraphInput, parseSequenceInput, parseSortInput } from "./validators";
 
 describe("parseSortInput", () => {
   it("accepts a raw array", () => {
@@ -44,5 +44,18 @@ describe("parseGraphInput", () => {
         }),
       ),
     ).toThrow("unknown node");
+  });
+});
+
+describe("parseSequenceInput", () => {
+  it("accepts KMP text and pattern", () => {
+    expect(parseSequenceInput('{"text":"ababcabcabababd","pattern":"ababd"}')).toEqual({
+      text: "ababcabcabababd",
+      pattern: "ababd",
+    });
+  });
+
+  it("rejects patterns longer than the text", () => {
+    expect(() => parseSequenceInput('{"text":"abc","pattern":"abcd"}')).toThrow("longer");
   });
 });

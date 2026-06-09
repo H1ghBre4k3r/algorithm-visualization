@@ -1,6 +1,5 @@
-export type AvailableAlgorithmId = "quicksort" | "dijkstra";
+export type AvailableAlgorithmId = "quicksort" | "dijkstra" | "kmp";
 export type PlannedAlgorithmId =
-  | "kmp"
   | "boyerMoore"
   | "levenshtein"
   | "prefixTrie"
@@ -19,11 +18,13 @@ export interface AlgorithmRequest {
 
 export type InputData =
   | { type: "sort"; value: SortInput }
-  | { type: "graph"; value: GraphInput };
+  | { type: "graph"; value: GraphInput }
+  | { type: "sequence"; value: SequenceInput };
 
 export type AlgorithmOptions =
   | { type: "quicksort"; value: QuicksortOptions }
-  | { type: "dijkstra"; value: DijkstraOptions };
+  | { type: "dijkstra"; value: DijkstraOptions }
+  | { type: "kmp"; value: KmpOptions };
 
 export interface QuicksortOptions {
   pivotStrategy: "last";
@@ -32,6 +33,8 @@ export interface QuicksortOptions {
 export interface DijkstraOptions {
   stopAtTarget: boolean;
 }
+
+export type KmpOptions = Record<string, never>;
 
 export interface SortInput {
   values: number[];
@@ -59,6 +62,11 @@ export interface GraphEdge {
   directed?: boolean;
 }
 
+export interface SequenceInput {
+  text: string;
+  pattern: string;
+}
+
 export interface Trace {
   algorithm: AlgorithmId;
   initialState: VisualizationState;
@@ -77,6 +85,13 @@ export type VisualizationState =
       target?: string | null;
       distances: NodeDistance[];
       path: string[];
+    }
+  | {
+      type: "sequence";
+      text: string;
+      pattern: string;
+      lps: number[];
+      matches: number[];
     };
 
 export interface NodeDistance {
@@ -150,5 +165,31 @@ export type TraceEvent =
       type: "graphPath";
       nodes: string[];
       totalDistance: number | null;
+      message: string;
+    }
+  | {
+      type: "sequenceBuildPrefix";
+      patternIndex: number;
+      prefixIndex: number;
+      lps: number[];
+      message: string;
+    }
+  | {
+      type: "sequenceCompare";
+      textIndex: number;
+      patternIndex: number;
+      matched: boolean;
+      message: string;
+    }
+  | {
+      type: "sequenceFallback";
+      fromPatternIndex: number;
+      toPatternIndex: number;
+      message: string;
+    }
+  | {
+      type: "sequenceMatch";
+      startIndex: number;
+      endIndex: number;
       message: string;
     };

@@ -17,7 +17,7 @@ import {
 } from "./data/catalog";
 import { customTemplate, exampleRequest } from "./data/examples";
 import { generateTrace } from "./lib/engine";
-import { randomGraphInput, randomSortInput } from "./lib/random";
+import { randomGraphInput, randomSequenceInput, randomSortInput } from "./lib/random";
 import { parseCustomInput } from "./lib/validators";
 import { drawTrace } from "./render/canvasRenderer";
 import type {
@@ -26,6 +26,7 @@ import type {
   AvailableAlgorithmId,
   GraphInput,
   InputMode,
+  SequenceInput,
   SortInput,
   Trace,
 } from "./types";
@@ -42,11 +43,14 @@ export default function App() {
   const [inputMode, setInputMode] = useState<InputMode>("example");
   const [sortSize, setSortSize] = useState(18);
   const [graphSize, setGraphSize] = useState(7);
+  const [sequenceSize, setSequenceSize] = useState(32);
   const [randomSort, setRandomSort] = useState<SortInput>(() => randomSortInput(18));
   const [randomGraph, setRandomGraph] = useState<GraphInput>(() => randomGraphInput(7));
+  const [randomSequence, setRandomSequence] = useState<SequenceInput>(() => randomSequenceInput(32));
   const [customJson, setCustomJson] = useState<Record<AvailableAlgorithmId, string>>({
     quicksort: customTemplate("quicksort"),
     dijkstra: customTemplate("dijkstra"),
+    kmp: customTemplate("kmp"),
   });
   const [trace, setTrace] = useState<Trace | null>(null);
   const [inputError, setInputError] = useState<string | null>(null);
@@ -60,7 +64,14 @@ export default function App() {
     let request: AlgorithmRequest;
 
     try {
-      request = buildRequest(algorithm, inputMode, randomSort, randomGraph, customJson[algorithm]);
+      request = buildRequest(
+        algorithm,
+        inputMode,
+        randomSort,
+        randomGraph,
+        randomSequence,
+        customJson[algorithm],
+      );
       setInputError(null);
     } catch (error) {
       setTrace(null);
@@ -93,7 +104,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [algorithm, inputMode, randomSort, randomGraph, customJson]);
+  }, [algorithm, inputMode, randomSort, randomGraph, randomSequence, customJson]);
 
   useEffect(() => {
     if (!isPlaying || !trace) return;
@@ -119,6 +130,8 @@ export default function App() {
   function refreshRandomInput() {
     if (algorithm === "quicksort") {
       setRandomSort(randomSortInput(sortSize));
+    } else if (algorithm === "kmp") {
+      setRandomSequence(randomSequenceInput(sequenceSize));
     } else {
       setRandomGraph(randomGraphInput(graphSize));
     }
@@ -231,12 +244,12 @@ export default function App() {
           {inputMode === "random" && (
             <section className="control-section">
               <div className="section-row">
-                <h2>{algorithm === "quicksort" ? "Values" : "Nodes"}</h2>
+                <h2>{randomControlLabel(algorithm)}</h2>
                 <button className="icon-button" type="button" title="Generate" onClick={refreshRandomInput}>
                   <Shuffle size={18} />
                 </button>
               </div>
-              {algorithm === "quicksort" ? (
+              {algorithm === "quicksort" && (
                 <RangeControl
                   label="Count"
                   min={6}
@@ -247,7 +260,8 @@ export default function App() {
                     setRandomSort(randomSortInput(value));
                   }}
                 />
-              ) : (
+              )}
+              {algorithm === "dijkstra" && (
                 <RangeControl
                   label="Count"
                   min={4}
@@ -256,6 +270,18 @@ export default function App() {
                   onChange={(value) => {
                     setGraphSize(value);
                     setRandomGraph(randomGraphInput(value));
+                  }}
+                />
+              )}
+              {algorithm === "kmp" && (
+                <RangeControl
+                  label="Length"
+                  min={12}
+                  max={80}
+                  value={sequenceSize}
+                  onChange={(value) => {
+                    setSequenceSize(value);
+                    setRandomSequence(randomSequenceInput(value));
                   }}
                 />
               )}
@@ -352,6 +378,7 @@ function buildRequest(
   inputMode: InputMode,
   randomSort: SortInput,
   randomGraph: GraphInput,
+  randomSequence: SequenceInput,
   customJson: string,
 ): AlgorithmRequest {
   if (inputMode === "example") {
@@ -363,26 +390,48 @@ function buildRequest(
       algorithm,
       inputMode,
       input: parseCustomInput(algorithm, customJson),
-      options:
-        algorithm === "quicksort"
-          ? { type: "quicksort", value: { pivotStrategy: "last" } }
-          : { type: "dijkstra", value: { stopAtTarget: true } },
+      options: optionsForAlgorithm(algorithm),
     };
   }
 
-  return algorithm === "quicksort"
-    ? {
-        algorithm,
-        inputMode,
-        input: { type: "sort", value: randomSort },
-        options: { type: "quicksort", value: { pivotStrategy: "last" } },
-      }
-    : {
-        algorithm,
-        inputMode,
-        input: { type: "graph", value: randomGraph },
-        options: { type: "dijkstra", value: { stopAtTarget: true } },
-      };
+  if (algorithm === "quicksort") {
+    return {
+      algorithm,
+      inputMode,
+      input: { type: "sort", value: randomSort },
+      options: optionsForAlgorithm(algorithm),
+    };
+  }
+  if (algorithm === "kmp") {
+    return {
+      algorithm,
+      inputMode,
+      input: { type: "sequence", value: randomSequence },
+      options: optionsForAlgorithm(algorithm),
+    };
+  }
+  return {
+    algorithm,
+    inputMode,
+    input: { type: "graph", value: randomGraph },
+    options: optionsForAlgorithm(algorithm),
+  };
+}
+
+function optionsForAlgorithm(algorithm: AvailableAlgorithmId): AlgorithmRequest["options"] {
+  if (algorithm === "quicksort") {
+    return { type: "quicksort", value: { pivotStrategy: "last" } };
+  }
+  if (algorithm === "kmp") {
+    return { type: "kmp", value: {} };
+  }
+  return { type: "dijkstra", value: { stopAtTarget: true } };
+}
+
+function randomControlLabel(algorithm: AvailableAlgorithmId) {
+  if (algorithm === "quicksort") return "Values";
+  if (algorithm === "kmp") return "Text";
+  return "Nodes";
 }
 
 function VisualizationCanvas({ trace, step }: { trace: Trace; step: number }) {

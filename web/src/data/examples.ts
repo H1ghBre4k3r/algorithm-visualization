@@ -1,4 +1,4 @@
-import type { AlgorithmRequest, AvailableAlgorithmId, GraphInput, SortInput } from "../types";
+import type { AlgorithmRequest, AvailableAlgorithmId, GraphInput, SequenceInput, SortInput } from "../types";
 
 export const exampleSortInput: SortInput = {
   values: [42, 12, 77, 18, 93, 31, 64, 5, 56, 29],
@@ -28,6 +28,11 @@ export const exampleGraphInput: GraphInput = {
   target: "F",
 };
 
+export const exampleSequenceInput: SequenceInput = {
+  text: "ababcabcabababd",
+  pattern: "ababd",
+};
+
 export function exampleRequest(algorithm: AvailableAlgorithmId): AlgorithmRequest {
   if (algorithm === "quicksort") {
     return {
@@ -35,6 +40,15 @@ export function exampleRequest(algorithm: AvailableAlgorithmId): AlgorithmReques
       inputMode: "example",
       input: { type: "sort", value: structuredClone(exampleSortInput) },
       options: { type: "quicksort", value: { pivotStrategy: "last" } },
+    };
+  }
+
+  if (algorithm === "kmp") {
+    return {
+      algorithm,
+      inputMode: "example",
+      input: { type: "sequence", value: structuredClone(exampleSequenceInput) },
+      options: { type: "kmp", value: {} },
     };
   }
 
@@ -47,6 +61,11 @@ export function exampleRequest(algorithm: AvailableAlgorithmId): AlgorithmReques
 }
 
 export function customTemplate(algorithm: AvailableAlgorithmId): string {
-  const input = algorithm === "quicksort" ? exampleSortInput : exampleGraphInput;
+  const input =
+    algorithm === "quicksort"
+      ? exampleSortInput
+      : algorithm === "kmp"
+        ? exampleSequenceInput
+        : exampleGraphInput;
   return JSON.stringify(input, null, 2);
 }
