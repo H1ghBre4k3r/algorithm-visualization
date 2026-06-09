@@ -20,7 +20,10 @@ export function parseCustomInput(algorithm: AvailableAlgorithmId, raw: string): 
     return { type: "sort", value: parseSortInput(raw) };
   }
   if (algorithm === "kmp") {
-    return { type: "sequence", value: parseSequenceInput(raw) };
+    return { type: "sequence", value: parseKmpInput(raw) };
+  }
+  if (algorithm === "levenshtein") {
+    return { type: "sequence", value: parseEditDistanceInput(raw) };
   }
   return { type: "graph", value: parseGraphInput(raw) };
 }
@@ -92,7 +95,7 @@ export function parseGraphInput(raw: string): GraphInput {
   };
 }
 
-export function parseSequenceInput(raw: string): SequenceInput {
+export function parseKmpInput(raw: string): SequenceInput {
   const parsed = readRecord(parseJson(raw));
   const text = readString(parsed.text, "KMP text");
   const pattern = readString(parsed.pattern, "KMP pattern");
@@ -107,6 +110,23 @@ export function parseSequenceInput(raw: string): SequenceInput {
   }
   if (patternLength > 48) {
     throw new InputValidationError("KMP pattern supports up to 48 characters.");
+  }
+
+  return { text, pattern };
+}
+
+export function parseEditDistanceInput(raw: string): SequenceInput {
+  const parsed = readRecord(parseJson(raw));
+  const text = readString(parsed.text, "Levenshtein source text");
+  const pattern = readString(parsed.pattern, "Levenshtein target text");
+  const textLength = Array.from(text).length;
+  const patternLength = Array.from(pattern).length;
+
+  if (textLength > 24) {
+    throw new InputValidationError("Levenshtein source text supports up to 24 characters.");
+  }
+  if (patternLength > 24) {
+    throw new InputValidationError("Levenshtein target text supports up to 24 characters.");
   }
 
   return { text, pattern };

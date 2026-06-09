@@ -6,7 +6,7 @@ The current milestone establishes the website architecture and proves the trace 
 
 - Sorting: Quicksort.
 - Graph: Dijkstra, Prim MST.
-- Sequence: Knuth-Morris-Pratt.
+- Sequence: Knuth-Morris-Pratt, Levenshtein Distance.
 - Input modes: example, random, custom JSON.
 - Rendering: Canvas 2D with real-time playback controls.
 - Engine: Rust trace core, WASM wrapper, TypeScript fallback for local development before `wasm-pack` output is generated.
@@ -40,8 +40,8 @@ Before an algorithm is marked live in the catalog, it must have:
    - Introduce graph input presets for sparse, dense, directed, and grid-style graphs.
 
 4. Add sequence processing.
-   - Add Boyer-Moore, Levenshtein Distance, and prefix tree construction.
-   - Extend the sequence renderer into table/trie views rather than forcing every sequence algorithm into the KMP row model.
+   - Add Boyer-Moore and prefix tree construction.
+   - Extend the sequence renderer into trie views while keeping table rendering for dynamic-programming algorithms.
 
 5. Add distributed algorithms.
    - Add handshake protocols, time synchronization, leader election, and Paxos.
@@ -49,7 +49,7 @@ Before an algorithm is marked live in the catalog, it must have:
 
 ## Current Gaps
 
-- Only Quicksort, Dijkstra, Prim MST, and Knuth-Morris-Pratt are live.
+- Only Quicksort, Dijkstra, Prim MST, Knuth-Morris-Pratt, and Levenshtein Distance are live.
 - Planned algorithms are visible in the catalog but intentionally do not generate traces yet.
 - Browser verification is manual right now.
 - The frontend can run without generated WASM through a TypeScript fallback, but full Rust/WASM browser execution still requires `wasm-pack`.

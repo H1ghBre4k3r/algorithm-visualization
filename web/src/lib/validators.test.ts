@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { parseGraphInput, parseSequenceInput, parseSortInput } from "./validators";
+import { parseEditDistanceInput, parseGraphInput, parseKmpInput, parseSortInput } from "./validators";
 
 describe("parseSortInput", () => {
   it("accepts a raw array", () => {
@@ -47,15 +47,31 @@ describe("parseGraphInput", () => {
   });
 });
 
-describe("parseSequenceInput", () => {
+describe("parseKmpInput", () => {
   it("accepts KMP text and pattern", () => {
-    expect(parseSequenceInput('{"text":"ababcabcabababd","pattern":"ababd"}')).toEqual({
+    expect(parseKmpInput('{"text":"ababcabcabababd","pattern":"ababd"}')).toEqual({
       text: "ababcabcabababd",
       pattern: "ababd",
     });
   });
 
   it("rejects patterns longer than the text", () => {
-    expect(() => parseSequenceInput('{"text":"abc","pattern":"abcd"}')).toThrow("longer");
+    expect(() => parseKmpInput('{"text":"abc","pattern":"abcd"}')).toThrow("longer");
+  });
+});
+
+describe("parseEditDistanceInput", () => {
+  it("accepts source and target strings", () => {
+    expect(parseEditDistanceInput('{"text":"kitten","pattern":"sitting"}')).toEqual({
+      text: "kitten",
+      pattern: "sitting",
+    });
+  });
+
+  it("allows the target to be longer than the source", () => {
+    expect(parseEditDistanceInput('{"text":"abc","pattern":"abcd"}')).toEqual({
+      text: "abc",
+      pattern: "abcd",
+    });
   });
 });

@@ -73,3 +73,16 @@ export function randomSequenceInput(size: number): SequenceInput {
     pattern,
   };
 }
+
+export function randomEditDistanceInput(size: number): SequenceInput {
+  const alphabet = ["a", "b", "c", "d", "e", "f"];
+  const sourceLength = Math.max(3, Math.min(18, Math.floor(size / 2)));
+  const targetLength = Math.max(3, Math.min(18, Math.ceil(size / 2)));
+  const build = (length: number) =>
+    Array.from({ length }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join("");
+
+  return {
+    text: build(sourceLength),
+    pattern: build(targetLength),
+  };
+}

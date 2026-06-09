@@ -33,6 +33,11 @@ export const exampleSequenceInput: SequenceInput = {
   pattern: "ababd",
 };
 
+export const exampleEditDistanceInput: SequenceInput = {
+  text: "kitten",
+  pattern: "sitting",
+};
+
 export function exampleRequest(algorithm: AvailableAlgorithmId): AlgorithmRequest {
   if (algorithm === "quicksort") {
     return {
@@ -49,6 +54,15 @@ export function exampleRequest(algorithm: AvailableAlgorithmId): AlgorithmReques
       inputMode: "example",
       input: { type: "sequence", value: structuredClone(exampleSequenceInput) },
       options: { type: "kmp", value: {} },
+    };
+  }
+
+  if (algorithm === "levenshtein") {
+    return {
+      algorithm,
+      inputMode: "example",
+      input: { type: "sequence", value: structuredClone(exampleEditDistanceInput) },
+      options: { type: "levenshtein", value: {} },
     };
   }
 
@@ -75,6 +89,8 @@ export function customTemplate(algorithm: AvailableAlgorithmId): string {
       ? exampleSortInput
       : algorithm === "kmp"
         ? exampleSequenceInput
-        : exampleGraphInput;
+        : algorithm === "levenshtein"
+          ? exampleEditDistanceInput
+          : exampleGraphInput;
   return JSON.stringify(input, null, 2);
 }

@@ -28,6 +28,10 @@ export function generateTraceFallback(request: AlgorithmRequest): Trace {
     return traceKmp(request.input.value);
   }
 
+  if (request.algorithm === "levenshtein" && request.input.type === "sequence") {
+    return traceLevenshtein(request.input.value);
+  }
+
   throw new Error("Algorithm and input type do not match.");
 }
 
@@ -464,6 +468,7 @@ function traceKmp(input: SequenceInput): Trace {
       pattern: input.pattern,
       lps: Array(pattern.length).fill(0),
       matches: [],
+      matrix: [],
     },
     finalState: {
       type: "sequence",
@@ -471,6 +476,7 @@ function traceKmp(input: SequenceInput): Trace {
       pattern: input.pattern,
       lps,
       matches,
+      matrix: [],
     },
     events,
     metadata: {
@@ -482,6 +488,89 @@ function traceKmp(input: SequenceInput): Trace {
         matches.length === 0 ? "No pattern matches found." : `Found ${matches.length} pattern match(es).`,
     },
   };
+}
+
+function traceLevenshtein(input: SequenceInput): Trace {
+  validateEditDistance(input);
+
+  const source = Array.from(input.text);
+  const target = Array.from(input.pattern);
+  const rows = source.length + 1;
+  const cols = target.length + 1;
+  const matrix = initialEditMatrix(rows, cols);
+  const events: TraceEvent[] = [];
+
+  for (let row = 1; row < rows; row += 1) {
+    for (let col = 1; col < cols; col += 1) {
+      const cost = source[row - 1] === target[col - 1] ? 0 : 1;
+      const deletion = (matrix[row - 1][col] ?? 0) + 1;
+      const insertion = (matrix[row][col - 1] ?? 0) + 1;
+      const substitution = (matrix[row - 1][col - 1] ?? 0) + cost;
+      const value = Math.min(deletion, insertion, substitution);
+      const operation =
+        value === substitution && cost === 0
+          ? "match"
+          : value === substitution
+            ? "substitute"
+            : value === deletion
+              ? "delete"
+              : "insert";
+
+      matrix[row][col] = value;
+      events.push({
+        type: "sequenceEditCell",
+        row,
+        col,
+        deletion,
+        insertion,
+        substitution,
+        value,
+        operation,
+        matrix: cloneMatrix(matrix),
+        message: `Set cell (${row}, ${col}) to ${value} using ${operation}.`,
+      });
+    }
+  }
+
+  const distance = matrix[rows - 1][cols - 1] ?? 0;
+  return {
+    algorithm: "levenshtein",
+    initialState: {
+      type: "sequence",
+      text: input.text,
+      pattern: input.pattern,
+      lps: [],
+      matches: [],
+      matrix: initialEditMatrix(rows, cols),
+    },
+    finalState: {
+      type: "sequence",
+      text: input.text,
+      pattern: input.pattern,
+      lps: [],
+      matches: [],
+      matrix,
+    },
+    events,
+    metadata: {
+      algorithmName: "Levenshtein Distance",
+      category: "Sequence",
+      inputSize: Math.max(source.length, target.length),
+      eventCount: events.length,
+      resultSummary: `Edit distance is ${distance}.`,
+    },
+  };
+}
+
+function initialEditMatrix(rows: number, cols: number) {
+  const matrix: Array<Array<number | null>> = Array.from({ length: rows }, () => Array(cols).fill(null));
+  for (let row = 0; row < rows; row += 1) matrix[row][0] = row;
+  for (let col = 0; col < cols; col += 1) matrix[0][col] = col;
+  return matrix;
+}
+
+function cloneMatrix(matrix: Array<Array<number | null>>) {
+  return matrix.map((row) => [...row]);
 }
 
 function buildLpsTrace(pattern: string[], events: TraceEvent[]) {
@@ -658,6 +747,24 @@ function validateSequence(input: SequenceInput) {
   }
   if (patternLength > 48) {
     throw new Error("KMP pattern is capped at 48 characters for interactive playback.");
+  }
+}
+
+function validateEditDistance(input: SequenceInput) {
+  const textLength = Array.from(input.text).length;
+  const patternLength = Array.from(input.pattern).length;
+
+  if (textLength === 0) {
+    throw new Error("Levenshtein source text cannot be empty.");
+  }
+  if (patternLength === 0) {
+    throw new Error("Levenshtein target text cannot be empty.");
+  }
+  if (textLength > 24) {
+    throw new Error("Levenshtein source text is capped at 24 characters for interactive playback.");
+  }
+  if (patternLength > 24) {
+    throw new Error("Levenshtein target text is capped at 24 characters for interactive playback.");
   }
 }
 

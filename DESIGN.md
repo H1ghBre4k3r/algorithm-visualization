@@ -42,4 +42,6 @@ Reference: https://impeccable.style
   - Active comparison: amber.
   - Mismatch/fallback: red.
   - Prefix table focus: violet.
+  - Dynamic-programming active cell: blue.
+  - Edit operation costs: amber/red/violet for insertion, deletion, and substitution.
   - Final matches: green.

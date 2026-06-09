@@ -8,6 +8,7 @@ Browser-first algorithm visualization MVP with a Rust trace core, WASM bindings,
 - Dijkstra trace generation and animated weighted-graph visualization.
 - Prim minimum-spanning-tree trace generation and graph visualization.
 - Knuth-Morris-Pratt trace generation and sequence/prefix-table visualization.
+- Levenshtein Distance trace generation and dynamic-programming table visualization.
 - Example, random, and custom JSON inputs.
 - Playback controls for play, pause, step, reset, and speed.
 - Rust unit tests for algorithm correctness and trace shape.

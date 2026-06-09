@@ -89,7 +89,7 @@ export const algorithms: AlgorithmCatalogItem[] = [
     id: "levenshtein",
     label: "Levenshtein Distance",
     category: "sequence",
-    status: "planned",
+    status: "available",
     summary: "Fill a dynamic-programming grid for edit distance.",
   },
   {

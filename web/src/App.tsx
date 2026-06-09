@@ -17,7 +17,7 @@ import {
 } from "./data/catalog";
 import { customTemplate, exampleRequest } from "./data/examples";
 import { generateTrace } from "./lib/engine";
-import { randomGraphInput, randomSequenceInput, randomSortInput } from "./lib/random";
+import { randomEditDistanceInput, randomGraphInput, randomSequenceInput, randomSortInput } from "./lib/random";
 import { parseCustomInput } from "./lib/validators";
 import { drawTrace } from "./render/canvasRenderer";
 import type {
@@ -44,14 +44,17 @@ export default function App() {
   const [sortSize, setSortSize] = useState(18);
   const [graphSize, setGraphSize] = useState(7);
   const [sequenceSize, setSequenceSize] = useState(32);
+  const [editSize, setEditSize] = useState(14);
   const [randomSort, setRandomSort] = useState<SortInput>(() => randomSortInput(18));
   const [randomGraph, setRandomGraph] = useState<GraphInput>(() => randomGraphInput(7));
   const [randomSequence, setRandomSequence] = useState<SequenceInput>(() => randomSequenceInput(32));
+  const [randomEditDistance, setRandomEditDistance] = useState<SequenceInput>(() => randomEditDistanceInput(14));
   const [customJson, setCustomJson] = useState<Record<AvailableAlgorithmId, string>>({
     quicksort: customTemplate("quicksort"),
     dijkstra: customTemplate("dijkstra"),
     primMst: customTemplate("primMst"),
     kmp: customTemplate("kmp"),
+    levenshtein: customTemplate("levenshtein"),
   });
   const [trace, setTrace] = useState<Trace | null>(null);
   const [inputError, setInputError] = useState<string | null>(null);
@@ -71,6 +74,7 @@ export default function App() {
         randomSort,
         randomGraph,
         randomSequence,
+        randomEditDistance,
         customJson[algorithm],
       );
       setInputError(null);
@@ -105,7 +109,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [algorithm, inputMode, randomSort, randomGraph, randomSequence, customJson]);
+  }, [algorithm, inputMode, randomSort, randomGraph, randomSequence, randomEditDistance, customJson]);
 
   useEffect(() => {
     if (!isPlaying || !trace) return;
@@ -133,6 +137,8 @@ export default function App() {
       setRandomSort(randomSortInput(sortSize));
     } else if (algorithm === "kmp") {
       setRandomSequence(randomSequenceInput(sequenceSize));
+    } else if (algorithm === "levenshtein") {
+      setRandomEditDistance(randomEditDistanceInput(editSize));
     } else {
       setRandomGraph(randomGraphInput(graphSize));
     }
@@ -286,6 +292,18 @@ export default function App() {
                   }}
                 />
               )}
+              {algorithm === "levenshtein" && (
+                <RangeControl
+                  label="Length"
+                  min={6}
+                  max={36}
+                  value={editSize}
+                  onChange={(value) => {
+                    setEditSize(value);
+                    setRandomEditDistance(randomEditDistanceInput(value));
+                  }}
+                />
+              )}
             </section>
           )}
 
@@ -380,6 +398,7 @@ function buildRequest(
   randomSort: SortInput,
   randomGraph: GraphInput,
   randomSequence: SequenceInput,
+  randomEditDistance: SequenceInput,
   customJson: string,
 ): AlgorithmRequest {
   if (inputMode === "example") {
@@ -411,6 +430,14 @@ function buildRequest(
       options: optionsForAlgorithm(algorithm),
     };
   }
+  if (algorithm === "levenshtein") {
+    return {
+      algorithm,
+      inputMode,
+      input: { type: "sequence", value: randomEditDistance },
+      options: optionsForAlgorithm(algorithm),
+    };
+  }
   if (algorithm === "primMst") {
     return {
       algorithm,
@@ -434,6 +461,9 @@ function optionsForAlgorithm(algorithm: AvailableAlgorithmId): AlgorithmRequest[
   if (algorithm === "kmp") {
     return { type: "kmp", value: {} };
   }
+  if (algorithm === "levenshtein") {
+    return { type: "levenshtein", value: {} };
+  }
   if (algorithm === "primMst") {
     return { type: "primMst", value: {} };
   }
@@ -442,7 +472,7 @@ function optionsForAlgorithm(algorithm: AvailableAlgorithmId): AlgorithmRequest[
 
 function randomControlLabel(algorithm: AvailableAlgorithmId) {
   if (algorithm === "quicksort") return "Values";
-  if (algorithm === "kmp") return "Text";
+  if (algorithm === "kmp" || algorithm === "levenshtein") return "Text";
   return "Nodes";
 }
 

@@ -10,6 +10,7 @@ pub enum AlgorithmId {
     Dijkstra,
     PrimMst,
     Kmp,
+    Levenshtein,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -45,6 +46,7 @@ pub enum AlgorithmOptions {
     Dijkstra(DijkstraOptions),
     PrimMst(PrimMstOptions),
     Kmp(KmpOptions),
+    Levenshtein(LevenshteinOptions),
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -72,6 +74,10 @@ pub struct PrimMstOptions {}
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct KmpOptions {}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct LevenshteinOptions {}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -145,6 +151,7 @@ pub enum VisualizationState {
         pattern: String,
         lps: Vec<usize>,
         matches: Vec<usize>,
+        matrix: Vec<Vec<Option<usize>>>,
     },
 }
 
@@ -275,6 +282,17 @@ pub enum TraceEvent {
         end_index: usize,
         message: String,
     },
+    SequenceEditCell {
+        row: usize,
+        col: usize,
+        deletion: usize,
+        insertion: usize,
+        substitution: usize,
+        value: usize,
+        operation: String,
+        matrix: Vec<Vec<Option<usize>>>,
+        message: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -314,6 +332,7 @@ pub fn generate_trace(request: AlgorithmRequest) -> Result<Trace, AlgorithmError
         }
         (AlgorithmId::PrimMst, InputData::Graph(input)) => trace_prim_mst(input),
         (AlgorithmId::Kmp, InputData::Sequence(input)) => trace_kmp(input),
+        (AlgorithmId::Levenshtein, InputData::Sequence(input)) => trace_levenshtein(input),
         (AlgorithmId::Quicksort, _) => Err(AlgorithmError::new(
             "Quicksort requires sort input with a values array.",
         )),
@@ -325,6 +344,9 @@ pub fn generate_trace(request: AlgorithmRequest) -> Result<Trace, AlgorithmError
         )),
         (AlgorithmId::Kmp, _) => Err(AlgorithmError::new(
             "Knuth-Morris-Pratt requires sequence input with text and pattern.",
+        )),
+        (AlgorithmId::Levenshtein, _) => Err(AlgorithmError::new(
+            "Levenshtein Distance requires sequence input with text and pattern.",
         )),
     }
 }
@@ -363,6 +385,15 @@ pub fn example_request(algorithm: AlgorithmId) -> AlgorithmRequest {
                 pattern: "ababd".to_string(),
             }),
             options: Some(AlgorithmOptions::Kmp(KmpOptions::default())),
+        },
+        AlgorithmId::Levenshtein => AlgorithmRequest {
+            algorithm,
+            input_mode: InputMode::Example,
+            input: InputData::Sequence(SequenceInput {
+                text: "kitten".to_string(),
+                pattern: "sitting".to_string(),
+            }),
+            options: Some(AlgorithmOptions::Levenshtein(LevenshteinOptions::default())),
         },
     }
 }
@@ -858,12 +889,14 @@ pub fn trace_kmp(input: SequenceInput) -> Result<Trace, AlgorithmError> {
             pattern: pattern.clone(),
             lps: vec![0; pattern_chars.len()],
             matches: Vec::new(),
+            matrix: Vec::new(),
         },
         final_state: VisualizationState::Sequence {
             text,
             pattern,
             lps,
             matches,
+            matrix: Vec::new(),
         },
         events,
         metadata,
@@ -942,6 +975,123 @@ fn validate_sequence(input: &SequenceInput) -> Result<(), AlgorithmError> {
     }
 
     Ok(())
+}
+
+pub fn trace_levenshtein(input: SequenceInput) -> Result<Trace, AlgorithmError> {
+    validate_edit_distance_sequence(&input)?;
+
+    let source = input.text;
+    let target = input.pattern;
+    let source_chars = source.chars().collect::<Vec<_>>();
+    let target_chars = target.chars().collect::<Vec<_>>();
+    let rows = source_chars.len() + 1;
+    let cols = target_chars.len() + 1;
+    let mut matrix = vec![vec![None; cols]; rows];
+    let mut events = Vec::new();
+
+    for (row, row_values) in matrix.iter_mut().enumerate() {
+        row_values[0] = Some(row);
+    }
+    for col in 0..cols {
+        matrix[0][col] = Some(col);
+    }
+
+    for row in 1..rows {
+        for col in 1..cols {
+            let cost = usize::from(source_chars[row - 1] != target_chars[col - 1]);
+            let deletion = matrix[row - 1][col].expect("initialized") + 1;
+            let insertion = matrix[row][col - 1].expect("initialized") + 1;
+            let substitution = matrix[row - 1][col - 1].expect("initialized") + cost;
+            let value = deletion.min(insertion).min(substitution);
+            let operation = if value == substitution && cost == 0 {
+                "match"
+            } else if value == substitution {
+                "substitute"
+            } else if value == deletion {
+                "delete"
+            } else {
+                "insert"
+            }
+            .to_string();
+
+            matrix[row][col] = Some(value);
+            events.push(TraceEvent::SequenceEditCell {
+                row,
+                col,
+                deletion,
+                insertion,
+                substitution,
+                value,
+                operation: operation.clone(),
+                matrix: matrix.clone(),
+                message: format!("Set cell ({row}, {col}) to {value} using {operation}."),
+            });
+        }
+    }
+
+    let distance = matrix[rows - 1][cols - 1].expect("final distance");
+    let metadata = TraceMetadata {
+        algorithm_name: "Levenshtein Distance".to_string(),
+        category: "Sequence".to_string(),
+        input_size: source_chars.len().max(target_chars.len()),
+        event_count: events.len(),
+        result_summary: format!("Edit distance is {distance}."),
+    };
+
+    Ok(Trace {
+        algorithm: AlgorithmId::Levenshtein,
+        initial_state: VisualizationState::Sequence {
+            text: source.clone(),
+            pattern: target.clone(),
+            lps: Vec::new(),
+            matches: Vec::new(),
+            matrix: initial_edit_matrix(rows, cols),
+        },
+        final_state: VisualizationState::Sequence {
+            text: source,
+            pattern: target,
+            lps: Vec::new(),
+            matches: Vec::new(),
+            matrix,
+        },
+        events,
+        metadata,
+    })
+}
+
+fn validate_edit_distance_sequence(input: &SequenceInput) -> Result<(), AlgorithmError> {
+    if input.text.is_empty() {
+        return Err(AlgorithmError::new(
+            "Levenshtein source text cannot be empty.",
+        ));
+    }
+    if input.pattern.is_empty() {
+        return Err(AlgorithmError::new(
+            "Levenshtein target text cannot be empty.",
+        ));
+    }
+    if input.text.chars().count() > 24 {
+        return Err(AlgorithmError::new(
+            "Levenshtein source text is capped at 24 characters for interactive playback.",
+        ));
+    }
+    if input.pattern.chars().count() > 24 {
+        return Err(AlgorithmError::new(
+            "Levenshtein target text is capped at 24 characters for interactive playback.",
+        ));
+    }
+    Ok(())
+}
+
+fn initial_edit_matrix(rows: usize, cols: usize) -> Vec<Vec<Option<usize>>> {
+    let mut matrix = vec![vec![None; cols]; rows];
+    for (row, row_values) in matrix.iter_mut().enumerate() {
+        row_values[0] = Some(row);
+    }
+    for col in 0..cols {
+        matrix[0][col] = Some(col);
+    }
+    matrix
 }
 
 #[derive(Debug, Clone)]
@@ -1285,6 +1435,7 @@ mod tests {
                 pattern: "ababd".to_string(),
                 lps: vec![0, 0, 1, 2, 0],
                 matches: vec![10],
+                matrix: Vec::new(),
             }
         );
         assert_valid_sequence_trace(&trace);
@@ -1302,18 +1453,48 @@ mod tests {
     }
 
     #[test]
+    fn levenshtein_trace_computes_edit_distance() {
+        let trace = trace_levenshtein(SequenceInput {
+            text: "kitten".to_string(),
+            pattern: "sitting".to_string(),
+        })
+        .expect("trace");
+
+        let VisualizationState::Sequence { matrix, .. } = &trace.final_state else {
+            panic!("expected sequence state");
+        };
+        assert_eq!(
+            matrix.last().and_then(|row| row.last()).copied().flatten(),
+            Some(3)
+        );
+        assert_valid_sequence_trace(&trace);
+    }
+
+    #[test]
+    fn levenshtein_rejects_empty_target() {
+        let error = trace_levenshtein(SequenceInput {
+            text: "abc".to_string(),
+            pattern: String::new(),
+        })
+        .expect_err("invalid sequence input");
+
+        assert!(error.message().contains("target"));
+    }
+
+    #[test]
     fn example_requests_generate_valid_traces() {
         for algorithm in [
             AlgorithmId::Quicksort,
             AlgorithmId::Dijkstra,
             AlgorithmId::PrimMst,
             AlgorithmId::Kmp,
+            AlgorithmId::Levenshtein,
         ] {
             let trace = generate_trace(example_request(algorithm)).expect("trace");
             match algorithm {
                 AlgorithmId::Quicksort => assert_valid_sort_trace(&trace),
                 AlgorithmId::Dijkstra | AlgorithmId::PrimMst => assert_valid_graph_trace(&trace),
-                AlgorithmId::Kmp => assert_valid_sequence_trace(&trace),
+                AlgorithmId::Kmp | AlgorithmId::Levenshtein => assert_valid_sequence_trace(&trace),
             }
         }
     }
@@ -1448,7 +1629,10 @@ mod tests {
         let VisualizationState::Sequence { text, pattern, .. } = &trace.initial_state else {
             panic!("sequence trace must start with a sequence state");
         };
-        assert_eq!(trace.algorithm, AlgorithmId::Kmp);
+        assert!(matches!(
+            trace.algorithm,
+            AlgorithmId::Kmp | AlgorithmId::Levenshtein
+        ));
         assert_eq!(trace.metadata.event_count, trace.events.len());
 
         let text_len = text.chars().count();
@@ -1497,6 +1681,24 @@ mod tests {
                     assert!(*end_index < text_len);
                     assert_eq!(*end_index - *start_index + 1, pattern_len);
                 }
+                TraceEvent::SequenceEditCell {
+                    row,
+                    col,
+                    deletion,
+                    insertion,
+                    substitution,
+                    value,
+                    matrix,
+                    ..
+                } => {
+                    assert!(*row <= text_len);
+                    assert!(*col <= pattern_len);
+                    assert!(*value <= *deletion);
+                    assert!(*value <= *insertion);
+                    assert!(*value <= *substitution);
+                    assert_eq!(matrix.len(), text_len + 1);
+                    assert!(matrix.iter().all(|row| row.len() == pattern_len + 1));
+                }
                 _ => panic!("sequence trace contains non-sequence event: {event:?}"),
             }
         }
@@ -1506,18 +1708,25 @@ mod tests {
             matches,
             text,
             pattern,
+            matrix,
         } = &trace.final_state
         else {
             panic!("sequence trace must finish with a sequence state");
         };
-        assert_eq!(lps.len(), pattern_len);
-        for start_index in matches {
-            let candidate = text
-                .chars()
-                .skip(*start_index)
-                .take(pattern_len)
-                .collect::<String>();
-            assert_eq!(candidate, *pattern);
+        if trace.algorithm == AlgorithmId::Kmp {
+            assert_eq!(lps.len(), pattern_len);
+            for start_index in matches {
+                let candidate = text
+                    .chars()
+                    .skip(*start_index)
+                    .take(pattern_len)
+                    .collect::<String>();
+                assert_eq!(candidate, *pattern);
+            }
+        } else {
+            assert_eq!(matrix.len(), text_len + 1);
+            assert!(matrix.iter().all(|row| row.len() == pattern_len + 1));
+            assert!(matrix[text_len][pattern_len].is_some());
         }
     }
 }

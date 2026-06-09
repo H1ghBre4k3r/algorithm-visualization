@@ -48,6 +48,10 @@ export function drawTrace(canvas: HTMLCanvasElement, trace: Trace, step: number)
   if (trace.algorithm === "kmp" && trace.initialState.type === "sequence") {
     drawSequenceTrace(context, width, height, trace, step);
   }
+
+  if (trace.algorithm === "levenshtein" && trace.initialState.type === "sequence") {
+    drawEditDistanceTrace(context, width, height, trace, step);
+  }
 }
 
 function drawBackground(context: CanvasRenderingContext2D, width: number, height: number) {
@@ -562,6 +566,101 @@ function drawLpsRow(
     context.textBaseline = "middle";
     context.fillText(String(value), cellX + cellSize / 2, y + cellSize / 2);
   });
+}
+
+function drawEditDistanceTrace(
+  context: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  trace: Trace,
+  step: number,
+) {
+  if (trace.initialState.type !== "sequence") {
+    return;
+  }
+
+  const frame = deriveEditDistanceFrame(trace, step);
+  const source = Array.from(trace.initialState.text);
+  const target = Array.from(trace.initialState.pattern);
+  const rows = source.length + 1;
+  const cols = target.length + 1;
+  const paddingX = 52;
+  const paddingY = 58;
+  const cellGap = 3;
+  const cellSize = Math.max(
+    24,
+    Math.min(46, (Math.min(width - paddingX * 2, height - paddingY * 2) - cellGap * Math.max(rows, cols)) / Math.max(rows, cols)),
+  );
+
+  context.fillStyle = palette.muted;
+  context.font = "700 12px Inter, system-ui, sans-serif";
+  context.textAlign = "center";
+  context.textBaseline = "middle";
+
+  target.forEach((char, index) => {
+    context.fillText(char, paddingX + (index + 1) * (cellSize + cellGap) + cellSize / 2, paddingY - 18);
+  });
+  source.forEach((char, index) => {
+    context.fillText(char, paddingX - 18, paddingY + (index + 1) * (cellSize + cellGap) + cellSize / 2);
+  });
+
+  for (let row = 0; row < rows; row += 1) {
+    for (let col = 0; col < cols; col += 1) {
+      const x = paddingX + col * (cellSize + cellGap);
+      const y = paddingY + row * (cellSize + cellGap);
+      const active = frame.row === row && frame.col === col;
+      const initialized = row === 0 || col === 0;
+      context.fillStyle = active ? palette.active : initialized ? "rgba(79, 111, 151, 0.12)" : "#ffffff";
+      context.strokeStyle = active ? palette.ink : "rgba(47, 64, 95, 0.22)";
+      context.lineWidth = active ? 2 : 1;
+      roundedRect(context, x, y, cellSize, cellSize, 6);
+      context.fill();
+      context.stroke();
+
+      const value = frame.matrix[row]?.[col];
+      if (value !== null && value !== undefined) {
+        context.fillStyle = palette.ink;
+        context.font = "700 14px Inter, system-ui, sans-serif";
+        context.fillText(String(value), x + cellSize / 2, y + cellSize / 2);
+      }
+    }
+  }
+
+  if (frame.operation) {
+    context.fillStyle = palette.muted;
+    context.font = "700 12px Inter, system-ui, sans-serif";
+    context.textAlign = "left";
+    context.fillText(`operation: ${frame.operation}`, paddingX, paddingY + rows * (cellSize + cellGap) + 24);
+  }
+}
+
+interface EditDistanceFrame {
+  matrix: Array<Array<number | null>>;
+  row: number | null;
+  col: number | null;
+  operation: string | null;
+}
+
+function deriveEditDistanceFrame(trace: Trace, step: number): EditDistanceFrame {
+  const matrix =
+    trace.initialState.type === "sequence"
+      ? trace.initialState.matrix.map((row) => [...row])
+      : [];
+  let row: number | null = null;
+  let col: number | null = null;
+  let operation: string | null = null;
+
+  for (let index = 0; index < Math.min(step, trace.events.length); index += 1) {
+    const event = trace.events[index];
+    if (event.type === "sequenceEditCell") {
+      matrix.splice(0, matrix.length, ...event.matrix.map((item) => [...item]));
+      row = event.row;
+      col = event.col;
+      operation = event.operation;
+    }
+  }
+
+  return { matrix, row, col, operation };
 }
 
 function drawArrowHead(

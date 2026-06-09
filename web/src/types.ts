@@ -1,7 +1,6 @@
-export type AvailableAlgorithmId = "quicksort" | "dijkstra" | "primMst" | "kmp";
+export type AvailableAlgorithmId = "quicksort" | "dijkstra" | "primMst" | "kmp" | "levenshtein";
 export type PlannedAlgorithmId =
   | "boyerMoore"
-  | "levenshtein"
   | "prefixTrie"
   | "handshake"
   | "timeSync"
@@ -25,7 +24,8 @@ export type AlgorithmOptions =
   | { type: "quicksort"; value: QuicksortOptions }
   | { type: "dijkstra"; value: DijkstraOptions }
   | { type: "primMst"; value: PrimMstOptions }
-  | { type: "kmp"; value: KmpOptions };
+  | { type: "kmp"; value: KmpOptions }
+  | { type: "levenshtein"; value: LevenshteinOptions };
 
 export interface QuicksortOptions {
   pivotStrategy: "last";
@@ -37,6 +37,7 @@ export interface DijkstraOptions {
 
 export type PrimMstOptions = Record<string, never>;
 export type KmpOptions = Record<string, never>;
+export type LevenshteinOptions = Record<string, never>;
 
 export interface SortInput {
   values: number[];
@@ -94,6 +95,7 @@ export type VisualizationState =
       pattern: string;
       lps: number[];
       matches: number[];
+      matrix: Array<Array<number | null>>;
     };
 
 export interface NodeDistance {
@@ -224,5 +226,17 @@ export type TraceEvent =
       type: "sequenceMatch";
       startIndex: number;
       endIndex: number;
+      message: string;
+    }
+  | {
+      type: "sequenceEditCell";
+      row: number;
+      col: number;
+      deletion: number;
+      insertion: number;
+      substitution: number;
+      value: number;
+      operation: string;
+      matrix: Array<Array<number | null>>;
       message: string;
     };
