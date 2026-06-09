@@ -32,6 +32,7 @@ Reference: https://impeccable.style
   - Comparison: warm amber.
   - Pivot: violet.
   - Insertion boundary: violet range wash.
+  - Bubble pass fixed tail: green.
   - Swap: red.
   - Fixed/sorted: green.
 - Graph:

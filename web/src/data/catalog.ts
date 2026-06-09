@@ -65,6 +65,13 @@ export const algorithms: AlgorithmCatalogItem[] = [
     summary: "Build a sorted prefix by inserting each value into place.",
   },
   {
+    id: "bubbleSort",
+    label: "Bubble Sort",
+    category: "sorting",
+    status: "available",
+    summary: "Repeatedly swap adjacent values until large items bubble right.",
+  },
+  {
     id: "bfs",
     label: "Breadth-First Search",
     category: "graph",

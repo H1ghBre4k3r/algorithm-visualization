@@ -39,7 +39,7 @@ export const exampleEditDistanceInput: SequenceInput = {
 };
 
 export function exampleRequest(algorithm: AvailableAlgorithmId): AlgorithmRequest {
-  if (algorithm === "quicksort" || algorithm === "insertionSort") {
+  if (algorithm === "quicksort" || algorithm === "insertionSort" || algorithm === "bubbleSort") {
     return {
       algorithm,
       inputMode: "example",
@@ -47,7 +47,9 @@ export function exampleRequest(algorithm: AvailableAlgorithmId): AlgorithmReques
       options:
         algorithm === "quicksort"
           ? { type: "quicksort", value: { pivotStrategy: "last" } }
-          : { type: "insertionSort", value: {} },
+          : algorithm === "insertionSort"
+            ? { type: "insertionSort", value: {} }
+            : { type: "bubbleSort", value: {} },
     };
   }
 
@@ -100,7 +102,7 @@ export function exampleRequest(algorithm: AvailableAlgorithmId): AlgorithmReques
 
 export function customTemplate(algorithm: AvailableAlgorithmId): string {
   const input =
-    algorithm === "quicksort" || algorithm === "insertionSort"
+    algorithm === "quicksort" || algorithm === "insertionSort" || algorithm === "bubbleSort"
       ? exampleSortInput
       : algorithm === "kmp"
         ? exampleSequenceInput

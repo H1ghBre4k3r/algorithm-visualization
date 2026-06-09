@@ -52,6 +52,7 @@ export default function App() {
   const [customJson, setCustomJson] = useState<Record<AvailableAlgorithmId, string>>({
     quicksort: customTemplate("quicksort"),
     insertionSort: customTemplate("insertionSort"),
+    bubbleSort: customTemplate("bubbleSort"),
     bfs: customTemplate("bfs"),
     dfs: customTemplate("dfs"),
     dijkstra: customTemplate("dijkstra"),
@@ -464,6 +465,9 @@ function optionsForAlgorithm(algorithm: AvailableAlgorithmId): AlgorithmRequest[
   if (algorithm === "insertionSort") {
     return { type: "insertionSort", value: {} };
   }
+  if (algorithm === "bubbleSort") {
+    return { type: "bubbleSort", value: {} };
+  }
   if (algorithm === "kmp") {
     return { type: "kmp", value: {} };
   }
@@ -489,7 +493,7 @@ function randomControlLabel(algorithm: AvailableAlgorithmId) {
 }
 
 function isSortAlgorithm(algorithm: AvailableAlgorithmId) {
-  return algorithm === "quicksort" || algorithm === "insertionSort";
+  return algorithm === "quicksort" || algorithm === "insertionSort" || algorithm === "bubbleSort";
 }
 
 function isGraphAlgorithm(algorithm: AvailableAlgorithmId) {

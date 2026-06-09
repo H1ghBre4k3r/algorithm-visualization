@@ -18,6 +18,10 @@ export function generateTraceFallback(request: AlgorithmRequest): Trace {
     return traceInsertionSort(request.input.value);
   }
 
+  if (request.algorithm === "bubbleSort" && request.input.type === "sort") {
+    return traceBubbleSort(request.input.value);
+  }
+
   if (request.algorithm === "dijkstra" && request.input.type === "graph") {
     const stopAtTarget =
       request.options?.type === "dijkstra" ? request.options.value.stopAtTarget : true;
@@ -144,6 +148,77 @@ function traceInsertionSort(input: SortInput): Trace {
     events,
     metadata: {
       algorithmName: "Insertion Sort",
+      category: "Sorting",
+      inputSize: values.length,
+      eventCount: events.length,
+      resultSummary: `Sorted ${values.length} values.`,
+    },
+  };
+}
+
+function traceBubbleSort(input: SortInput): Trace {
+  const initialValues = [...input.values];
+  const values = [...input.values];
+  const events: TraceEvent[] = [];
+
+  if (values.length > 128) {
+    throw new Error("Bubble Sort input is capped at 128 values for interactive playback.");
+  }
+
+  if (values.length > 1) {
+    for (let pass = 0; pass < values.length; pass += 1) {
+      const unsortedEnd = values.length - 1 - pass;
+      let swapped = false;
+
+      for (let index = 0; index < unsortedEnd; index += 1) {
+        events.push({
+          type: "sortCompare",
+          indices: [index, index + 1],
+          message: `Compare adjacent values ${values[index]} and ${values[index + 1]}.`,
+        });
+
+        if (values[index] > values[index + 1]) {
+          swap(values, index, index + 1);
+          swapped = true;
+          events.push({
+            type: "sortSwap",
+            indices: [index, index + 1],
+            values: [...values],
+            message: `Swap values at positions ${index} and ${index + 1}.`,
+          });
+        }
+      }
+
+      events.push({
+        type: "sortMarkSorted",
+        indices: Array.from({ length: values.length - unsortedEnd }, (_, offset) => unsortedEnd + offset),
+        message: `Value at index ${unsortedEnd} has bubbled into place.`,
+      });
+
+      if (!swapped) {
+        events.push({
+          type: "sortMarkSorted",
+          indices: values.map((_, index) => index),
+          message: "No swaps in this pass; all values are sorted.",
+        });
+        break;
+      }
+    }
+  } else if (values.length === 1) {
+    events.push({
+      type: "sortMarkSorted",
+      indices: [0],
+      message: "Single value is already sorted.",
+    });
+  }
+
+  return {
+    algorithm: "bubbleSort",
+    initialState: { type: "array", values: initialValues },
+    finalState: { type: "array", values },
+    events,
+    metadata: {
+      algorithmName: "Bubble Sort",
       category: "Sorting",
       inputSize: values.length,
       eventCount: events.length,

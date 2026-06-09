@@ -16,7 +16,7 @@ export class InputValidationError extends Error {
 }
 
 export function parseCustomInput(algorithm: AvailableAlgorithmId, raw: string): InputData {
-  if (algorithm === "quicksort" || algorithm === "insertionSort") {
+  if (algorithm === "quicksort" || algorithm === "insertionSort" || algorithm === "bubbleSort") {
     return { type: "sort", value: parseSortInput(raw) };
   }
   if (algorithm === "kmp") {

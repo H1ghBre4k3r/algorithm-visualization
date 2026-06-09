@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 pub enum AlgorithmId {
     Quicksort,
     InsertionSort,
+    BubbleSort,
     Bfs,
     Dfs,
     Dijkstra,
@@ -47,6 +48,7 @@ pub enum InputData {
 pub enum AlgorithmOptions {
     Quicksort(QuicksortOptions),
     InsertionSort(InsertionSortOptions),
+    BubbleSort(BubbleSortOptions),
     Bfs(BfsOptions),
     Dfs(DfsOptions),
     Dijkstra(DijkstraOptions),
@@ -69,6 +71,10 @@ fn default_pivot_strategy() -> String {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct InsertionSortOptions {}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct BubbleSortOptions {}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -348,6 +354,7 @@ pub fn generate_trace(request: AlgorithmRequest) -> Result<Trace, AlgorithmError
     match (request.algorithm, request.input) {
         (AlgorithmId::Quicksort, InputData::Sort(input)) => trace_quicksort(input),
         (AlgorithmId::InsertionSort, InputData::Sort(input)) => trace_insertion_sort(input),
+        (AlgorithmId::BubbleSort, InputData::Sort(input)) => trace_bubble_sort(input),
         (AlgorithmId::Bfs, InputData::Graph(input)) => {
             let stop_at_target = match request.options {
                 Some(AlgorithmOptions::Bfs(options)) => options.stop_at_target,
@@ -377,6 +384,9 @@ pub fn generate_trace(request: AlgorithmRequest) -> Result<Trace, AlgorithmError
         )),
         (AlgorithmId::InsertionSort, _) => Err(AlgorithmError::new(
             "Insertion Sort requires sort input with a values array.",
+        )),
+        (AlgorithmId::BubbleSort, _) => Err(AlgorithmError::new(
+            "Bubble Sort requires sort input with a values array.",
         )),
         (AlgorithmId::Bfs, _) => Err(AlgorithmError::new(
             "Breadth-first search requires graph input with nodes, edges, source, and target.",
@@ -420,6 +430,14 @@ pub fn example_request(algorithm: AlgorithmId) -> AlgorithmRequest {
             options: Some(AlgorithmOptions::InsertionSort(
                 InsertionSortOptions::default(),
             )),
+        },
+        AlgorithmId::BubbleSort => AlgorithmRequest {
+            algorithm,
+            input_mode: InputMode::Example,
+            input: InputData::Sort(SortInput {
+                values: vec![42, 12, 77, 18, 93, 31, 64, 5, 56, 29],
+            }),
+            options: Some(AlgorithmOptions::BubbleSort(BubbleSortOptions::default())),
         },
         AlgorithmId::Bfs => AlgorithmRequest {
             algorithm,
@@ -577,6 +595,82 @@ pub fn trace_insertion_sort(input: SortInput) -> Result<Trace, AlgorithmError> {
 
     Ok(Trace {
         algorithm: AlgorithmId::InsertionSort,
+        initial_state: VisualizationState::Array {
+            values: initial_values,
+        },
+        final_state: VisualizationState::Array { values },
+        events,
+        metadata,
+    })
+}
+
+pub fn trace_bubble_sort(input: SortInput) -> Result<Trace, AlgorithmError> {
+    if input.values.len() > 128 {
+        return Err(AlgorithmError::new(
+            "Bubble Sort input is capped at 128 values for interactive playback.",
+        ));
+    }
+
+    let initial_values = input.values.clone();
+    let mut values = input.values;
+    let mut events = Vec::new();
+
+    if values.len() > 1 {
+        for pass in 0..values.len() {
+            let unsorted_end = values.len() - 1 - pass;
+            let mut swapped = false;
+
+            for index in 0..unsorted_end {
+                events.push(TraceEvent::SortCompare {
+                    indices: [index, index + 1],
+                    message: format!(
+                        "Compare adjacent values {} and {}.",
+                        values[index],
+                        values[index + 1]
+                    ),
+                });
+
+                if values[index] > values[index + 1] {
+                    values.swap(index, index + 1);
+                    swapped = true;
+                    events.push(TraceEvent::SortSwap {
+                        indices: [index, index + 1],
+                        values: values.clone(),
+                        message: format!("Swap values at positions {index} and {}.", index + 1),
+                    });
+                }
+            }
+
+            events.push(TraceEvent::SortMarkSorted {
+                indices: (unsorted_end..values.len()).collect(),
+                message: format!("Value at index {unsorted_end} has bubbled into place."),
+            });
+
+            if !swapped {
+                events.push(TraceEvent::SortMarkSorted {
+                    indices: (0..values.len()).collect(),
+                    message: "No swaps in this pass; all values are sorted.".to_string(),
+                });
+                break;
+            }
+        }
+    } else if values.len() == 1 {
+        events.push(TraceEvent::SortMarkSorted {
+            indices: vec![0],
+            message: "Single value is already sorted.".to_string(),
+        });
+    }
+
+    let metadata = TraceMetadata {
+        algorithm_name: "Bubble Sort".to_string(),
+        category: "Sorting".to_string(),
+        input_size: values.len(),
+        event_count: events.len(),
+        result_summary: format!("Sorted {} values.", values.len()),
+    };
+
+    Ok(Trace {
+        algorithm: AlgorithmId::BubbleSort,
         initial_state: VisualizationState::Array {
             values: initial_values,
         },
@@ -1824,6 +1918,34 @@ mod tests {
     }
 
     #[test]
+    fn bubble_sort_trace_sorts_values() {
+        let trace = trace_bubble_sort(SortInput {
+            values: vec![9, 3, 7, 1, 4],
+        })
+        .expect("trace");
+
+        assert_eq!(
+            trace.final_state,
+            VisualizationState::Array {
+                values: vec![1, 3, 4, 7, 9]
+            }
+        );
+        assert!(
+            trace
+                .events
+                .iter()
+                .any(|event| matches!(event, TraceEvent::SortCompare { .. }))
+        );
+        assert!(
+            trace
+                .events
+                .iter()
+                .any(|event| matches!(event, TraceEvent::SortSwap { .. }))
+        );
+        assert_valid_sort_trace(&trace);
+    }
+
+    #[test]
     fn bfs_trace_finds_shortest_unweighted_path() {
         let trace = trace_bfs(example_graph(), true).expect("trace");
 
@@ -2028,6 +2150,7 @@ mod tests {
         for algorithm in [
             AlgorithmId::Quicksort,
             AlgorithmId::InsertionSort,
+            AlgorithmId::BubbleSort,
             AlgorithmId::Bfs,
             AlgorithmId::Dfs,
             AlgorithmId::Dijkstra,
@@ -2037,7 +2160,7 @@ mod tests {
         ] {
             let trace = generate_trace(example_request(algorithm)).expect("trace");
             match algorithm {
-                AlgorithmId::Quicksort | AlgorithmId::InsertionSort => {
+                AlgorithmId::Quicksort | AlgorithmId::InsertionSort | AlgorithmId::BubbleSort => {
                     assert_valid_sort_trace(&trace)
                 }
                 AlgorithmId::Bfs
@@ -2055,7 +2178,7 @@ mod tests {
         };
         assert!(matches!(
             trace.algorithm,
-            AlgorithmId::Quicksort | AlgorithmId::InsertionSort
+            AlgorithmId::Quicksort | AlgorithmId::InsertionSort | AlgorithmId::BubbleSort
         ));
         assert_eq!(trace.metadata.event_count, trace.events.len());
 

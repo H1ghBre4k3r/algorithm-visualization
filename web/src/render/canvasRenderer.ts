@@ -38,7 +38,9 @@ export function drawTrace(canvas: HTMLCanvasElement, trace: Trace, step: number)
   drawBackground(context, width, height);
 
   if (
-    (trace.algorithm === "quicksort" || trace.algorithm === "insertionSort") &&
+    (trace.algorithm === "quicksort" ||
+      trace.algorithm === "insertionSort" ||
+      trace.algorithm === "bubbleSort") &&
     trace.initialState.type === "array"
   ) {
     drawSortTrace(context, width, height, trace, step);
