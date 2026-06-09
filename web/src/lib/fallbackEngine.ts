@@ -22,6 +22,10 @@ export function generateTraceFallback(request: AlgorithmRequest): Trace {
     return traceBubbleSort(request.input.value);
   }
 
+  if (request.algorithm === "selectionSort" && request.input.type === "sort") {
+    return traceSelectionSort(request.input.value);
+  }
+
   if (request.algorithm === "mergesort" && request.input.type === "sort") {
     return traceMergesort(request.input.value);
   }
@@ -240,6 +244,76 @@ function traceBubbleSort(input: SortInput): Trace {
     events,
     metadata: {
       algorithmName: "Bubble Sort",
+      category: "Sorting",
+      inputSize: values.length,
+      eventCount: events.length,
+      resultSummary: `Sorted ${values.length} values.`,
+    },
+  };
+}
+
+function traceSelectionSort(input: SortInput): Trace {
+  const initialValues = [...input.values];
+  const values = [...input.values];
+  const events: TraceEvent[] = [];
+
+  if (values.length > 128) {
+    throw new Error("Selection Sort input is capped at 128 values for interactive playback.");
+  }
+
+  for (let start = 0; start < values.length; start += 1) {
+    let minIndex = start;
+    events.push({
+      type: "sortPartition",
+      range: [start, values.length - 1],
+      boundary: minIndex,
+      scanner: start,
+      message: `Scan for the smallest value from index ${start}.`,
+    });
+
+    for (let scanner = start + 1; scanner < values.length; scanner += 1) {
+      events.push({
+        type: "sortCompare",
+        indices: [minIndex, scanner],
+        message: `Compare current minimum ${values[minIndex]} with candidate ${values[scanner]}.`,
+      });
+
+      if (values[scanner] < values[minIndex]) {
+        minIndex = scanner;
+        events.push({
+          type: "sortPartition",
+          range: [start, values.length - 1],
+          boundary: minIndex,
+          scanner,
+          message: `New minimum candidate ${values[minIndex]} found at index ${minIndex}.`,
+        });
+      }
+    }
+
+    if (minIndex !== start) {
+      swap(values, start, minIndex);
+      events.push({
+        type: "sortSwap",
+        indices: [start, minIndex],
+        values: [...values],
+        message: `Move the selected minimum into position ${start}.`,
+      });
+    }
+
+    events.push({
+      type: "sortMarkSorted",
+      indices: Array.from({ length: start + 1 }, (_, index) => index),
+      message: `Positions 0 through ${start} are sorted.`,
+    });
+  }
+
+  return {
+    algorithm: "selectionSort",
+    initialState: { type: "array", values: initialValues },
+    finalState: { type: "array", values },
+    events,
+    metadata: {
+      algorithmName: "Selection Sort",
       category: "Sorting",
       inputSize: values.length,
       eventCount: events.length,

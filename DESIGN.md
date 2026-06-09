@@ -32,6 +32,7 @@ Reference: https://impeccable.style
   - Comparison: warm amber.
   - Pivot: violet.
   - Insertion boundary: violet range wash.
+  - Selection minimum candidate: violet range wash with amber comparisons.
   - Bubble pass fixed tail: green.
   - Merge range: violet range wash with amber comparisons.
   - Heap range: violet range wash with green fixed tail.

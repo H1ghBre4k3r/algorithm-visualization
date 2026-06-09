@@ -72,6 +72,13 @@ export const algorithms: AlgorithmCatalogItem[] = [
     summary: "Repeatedly swap adjacent values until large items bubble right.",
   },
   {
+    id: "selectionSort",
+    label: "Selection Sort",
+    category: "sorting",
+    status: "available",
+    summary: "Select the smallest remaining value for each sorted position.",
+  },
+  {
     id: "mergesort",
     label: "Mergesort",
     category: "sorting",

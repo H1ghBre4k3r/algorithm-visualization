@@ -2,6 +2,7 @@ export type AvailableAlgorithmId =
   | "quicksort"
   | "insertionSort"
   | "bubbleSort"
+  | "selectionSort"
   | "mergesort"
   | "heapSort"
   | "bfs"
@@ -38,6 +39,7 @@ export type AlgorithmOptions =
   | { type: "quicksort"; value: QuicksortOptions }
   | { type: "insertionSort"; value: InsertionSortOptions }
   | { type: "bubbleSort"; value: BubbleSortOptions }
+  | { type: "selectionSort"; value: SelectionSortOptions }
   | { type: "mergesort"; value: MergesortOptions }
   | { type: "heapSort"; value: HeapSortOptions }
   | { type: "bfs"; value: BfsOptions }
@@ -56,6 +58,7 @@ export interface QuicksortOptions {
 
 export type InsertionSortOptions = Record<string, never>;
 export type BubbleSortOptions = Record<string, never>;
+export type SelectionSortOptions = Record<string, never>;
 export type MergesortOptions = Record<string, never>;
 export type HeapSortOptions = Record<string, never>;
 
