@@ -20,6 +20,7 @@ export function parseCustomInput(algorithm: AvailableAlgorithmId, raw: string): 
     algorithm === "quicksort" ||
     algorithm === "insertionSort" ||
     algorithm === "bubbleSort" ||
+    algorithm === "cocktailShakerSort" ||
     algorithm === "selectionSort" ||
     algorithm === "shellSort" ||
     algorithm === "countingSort" ||

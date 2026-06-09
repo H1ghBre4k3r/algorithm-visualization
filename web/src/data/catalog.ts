@@ -72,6 +72,13 @@ export const algorithms: AlgorithmCatalogItem[] = [
     summary: "Repeatedly swap adjacent values until large items bubble right.",
   },
   {
+    id: "cocktailShakerSort",
+    label: "Cocktail Shaker Sort",
+    category: "sorting",
+    status: "available",
+    summary: "Sweep adjacent swaps forward and backward through a shrinking range.",
+  },
+  {
     id: "selectionSort",
     label: "Selection Sort",
     category: "sorting",

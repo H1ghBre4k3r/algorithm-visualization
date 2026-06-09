@@ -22,6 +22,10 @@ export function generateTraceFallback(request: AlgorithmRequest): Trace {
     return traceBubbleSort(request.input.value);
   }
 
+  if (request.algorithm === "cocktailShakerSort" && request.input.type === "sort") {
+    return traceCocktailShakerSort(request.input.value);
+  }
+
   if (request.algorithm === "selectionSort" && request.input.type === "sort") {
     return traceSelectionSort(request.input.value);
   }
@@ -264,6 +268,124 @@ function traceBubbleSort(input: SortInput): Trace {
     events,
     metadata: {
       algorithmName: "Bubble Sort",
+      category: "Sorting",
+      inputSize: values.length,
+      eventCount: events.length,
+      resultSummary: `Sorted ${values.length} values.`,
+    },
+  };
+}
+
+function traceCocktailShakerSort(input: SortInput): Trace {
+  const initialValues = [...input.values];
+  const values = [...input.values];
+  const events: TraceEvent[] = [];
+
+  if (values.length > 128) {
+    throw new Error("Cocktail Shaker Sort input is capped at 128 values for interactive playback.");
+  }
+
+  if (values.length > 1) {
+    let start = 0;
+    let end = values.length - 1;
+    let swapped = true;
+
+    while (swapped && start < end) {
+      swapped = false;
+      events.push({
+        type: "sortPartition",
+        range: [start, end],
+        boundary: end,
+        scanner: start,
+        message: `Sweep forward from ${start} to ${end}.`,
+      });
+
+      for (let index = start; index < end; index += 1) {
+        events.push({
+          type: "sortCompare",
+          indices: [index, index + 1],
+          message: `Forward compare ${values[index]} and ${values[index + 1]}.`,
+        });
+
+        if (values[index] > values[index + 1]) {
+          swap(values, index, index + 1);
+          swapped = true;
+          events.push({
+            type: "sortSwap",
+            indices: [index, index + 1],
+            values: [...values],
+            message: `Swap positions ${index} and ${index + 1}.`,
+          });
+        }
+      }
+
+      events.push({
+        type: "sortMarkSorted",
+        indices: Array.from({ length: values.length - end }, (_, offset) => end + offset),
+        message: `Value at index ${end} is fixed after the forward sweep.`,
+      });
+
+      if (!swapped) {
+        break;
+      }
+
+      swapped = false;
+      end -= 1;
+      events.push({
+        type: "sortPartition",
+        range: [start, end],
+        boundary: start,
+        scanner: end,
+        message: `Sweep backward from ${end} to ${start}.`,
+      });
+
+      for (let index = end; index > start; index -= 1) {
+        events.push({
+          type: "sortCompare",
+          indices: [index - 1, index],
+          message: `Backward compare ${values[index - 1]} and ${values[index]}.`,
+        });
+
+        if (values[index - 1] > values[index]) {
+          swap(values, index - 1, index);
+          swapped = true;
+          events.push({
+            type: "sortSwap",
+            indices: [index - 1, index],
+            values: [...values],
+            message: `Swap positions ${index - 1} and ${index}.`,
+          });
+        }
+      }
+
+      events.push({
+        type: "sortMarkSorted",
+        indices: Array.from({ length: start + 1 }, (_, index) => index),
+        message: `Value at index ${start} is fixed after the backward sweep.`,
+      });
+      start += 1;
+    }
+
+    events.push({
+      type: "sortMarkSorted",
+      indices: values.map((_, index) => index),
+      message: "Bidirectional sweeps complete; values are sorted.",
+    });
+  } else if (values.length === 1) {
+    events.push({
+      type: "sortMarkSorted",
+      indices: [0],
+      message: "Single value is already sorted.",
+    });
+  }
+
+  return {
+    algorithm: "cocktailShakerSort",
+    initialState: { type: "array", values: initialValues },
+    finalState: { type: "array", values },
+    events,
+    metadata: {
+      algorithmName: "Cocktail Shaker Sort",
       category: "Sorting",
       inputSize: values.length,
       eventCount: events.length,

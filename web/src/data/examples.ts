@@ -43,6 +43,7 @@ export function exampleRequest(algorithm: AvailableAlgorithmId): AlgorithmReques
     algorithm === "quicksort" ||
     algorithm === "insertionSort" ||
     algorithm === "bubbleSort" ||
+    algorithm === "cocktailShakerSort" ||
     algorithm === "selectionSort" ||
     algorithm === "shellSort" ||
     algorithm === "countingSort" ||
@@ -63,21 +64,23 @@ export function exampleRequest(algorithm: AvailableAlgorithmId): AlgorithmReques
             ? { type: "insertionSort", value: {} }
             : algorithm === "bubbleSort"
               ? { type: "bubbleSort", value: {} }
-              : algorithm === "selectionSort"
-                ? { type: "selectionSort", value: {} }
-                : algorithm === "shellSort"
-                  ? { type: "shellSort", value: {} }
-                  : algorithm === "countingSort"
-                    ? { type: "countingSort", value: {} }
-                    : algorithm === "radixSort"
-                      ? { type: "radixSort", value: {} }
-                      : algorithm === "bucketSort"
-                        ? { type: "bucketSort", value: {} }
-                        : algorithm === "combSort"
-                          ? { type: "combSort", value: {} }
-                          : algorithm === "mergesort"
-                            ? { type: "mergesort", value: {} }
-                            : { type: "heapSort", value: {} },
+              : algorithm === "cocktailShakerSort"
+                ? { type: "cocktailShakerSort", value: {} }
+                : algorithm === "selectionSort"
+                  ? { type: "selectionSort", value: {} }
+                  : algorithm === "shellSort"
+                    ? { type: "shellSort", value: {} }
+                    : algorithm === "countingSort"
+                      ? { type: "countingSort", value: {} }
+                      : algorithm === "radixSort"
+                        ? { type: "radixSort", value: {} }
+                        : algorithm === "bucketSort"
+                          ? { type: "bucketSort", value: {} }
+                          : algorithm === "combSort"
+                            ? { type: "combSort", value: {} }
+                            : algorithm === "mergesort"
+                              ? { type: "mergesort", value: {} }
+                              : { type: "heapSort", value: {} },
     };
   }
 
@@ -141,6 +144,7 @@ export function customTemplate(algorithm: AvailableAlgorithmId): string {
     algorithm === "quicksort" ||
     algorithm === "insertionSort" ||
     algorithm === "bubbleSort" ||
+    algorithm === "cocktailShakerSort" ||
     algorithm === "selectionSort" ||
     algorithm === "shellSort" ||
     algorithm === "countingSort" ||

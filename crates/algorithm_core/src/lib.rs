@@ -9,6 +9,7 @@ pub enum AlgorithmId {
     Quicksort,
     InsertionSort,
     BubbleSort,
+    CocktailShakerSort,
     SelectionSort,
     ShellSort,
     CountingSort,
@@ -60,6 +61,7 @@ pub enum AlgorithmOptions {
     Quicksort(QuicksortOptions),
     InsertionSort(InsertionSortOptions),
     BubbleSort(BubbleSortOptions),
+    CocktailShakerSort(CocktailShakerSortOptions),
     SelectionSort(SelectionSortOptions),
     ShellSort(ShellSortOptions),
     CountingSort(CountingSortOptions),
@@ -97,6 +99,10 @@ pub struct InsertionSortOptions {}
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct BubbleSortOptions {}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct CocktailShakerSortOptions {}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
@@ -428,6 +434,9 @@ pub fn generate_trace(request: AlgorithmRequest) -> Result<Trace, AlgorithmError
         (AlgorithmId::Quicksort, InputData::Sort(input)) => trace_quicksort(input),
         (AlgorithmId::InsertionSort, InputData::Sort(input)) => trace_insertion_sort(input),
         (AlgorithmId::BubbleSort, InputData::Sort(input)) => trace_bubble_sort(input),
+        (AlgorithmId::CocktailShakerSort, InputData::Sort(input)) => {
+            trace_cocktail_shaker_sort(input)
+        }
         (AlgorithmId::SelectionSort, InputData::Sort(input)) => trace_selection_sort(input),
         (AlgorithmId::ShellSort, InputData::Sort(input)) => trace_shell_sort(input),
         (AlgorithmId::CountingSort, InputData::Sort(input)) => trace_counting_sort(input),
@@ -477,6 +486,9 @@ pub fn generate_trace(request: AlgorithmRequest) -> Result<Trace, AlgorithmError
         )),
         (AlgorithmId::BubbleSort, _) => Err(AlgorithmError::new(
             "Bubble Sort requires sort input with a values array.",
+        )),
+        (AlgorithmId::CocktailShakerSort, _) => Err(AlgorithmError::new(
+            "Cocktail Shaker Sort requires sort input with a values array.",
         )),
         (AlgorithmId::SelectionSort, _) => Err(AlgorithmError::new(
             "Selection Sort requires sort input with a values array.",
@@ -561,6 +573,16 @@ pub fn example_request(algorithm: AlgorithmId) -> AlgorithmRequest {
                 values: vec![42, 12, 77, 18, 93, 31, 64, 5, 56, 29],
             }),
             options: Some(AlgorithmOptions::BubbleSort(BubbleSortOptions::default())),
+        },
+        AlgorithmId::CocktailShakerSort => AlgorithmRequest {
+            algorithm,
+            input_mode: InputMode::Example,
+            input: InputData::Sort(SortInput {
+                values: vec![42, 12, 77, 18, 93, 31, 64, 5, 56, 29],
+            }),
+            options: Some(AlgorithmOptions::CocktailShakerSort(
+                CocktailShakerSortOptions::default(),
+            )),
         },
         AlgorithmId::SelectionSort => AlgorithmRequest {
             algorithm,
@@ -882,6 +904,129 @@ pub fn trace_bubble_sort(input: SortInput) -> Result<Trace, AlgorithmError> {
 
     Ok(Trace {
         algorithm: AlgorithmId::BubbleSort,
+        initial_state: VisualizationState::Array {
+            values: initial_values,
+        },
+        final_state: VisualizationState::Array { values },
+        events,
+        metadata,
+    })
+}
+
+pub fn trace_cocktail_shaker_sort(input: SortInput) -> Result<Trace, AlgorithmError> {
+    if input.values.len() > 128 {
+        return Err(AlgorithmError::new(
+            "Cocktail Shaker Sort input is capped at 128 values for interactive playback.",
+        ));
+    }
+
+    let initial_values = input.values.clone();
+    let mut values = input.values;
+    let mut events = Vec::new();
+    let len = values.len();
+
+    if len > 1 {
+        let mut start = 0;
+        let mut end = len - 1;
+        let mut swapped = true;
+
+        while swapped && start < end {
+            swapped = false;
+            events.push(TraceEvent::SortPartition {
+                range: [start, end],
+                boundary: end,
+                scanner: start,
+                message: format!("Sweep forward from {start} to {end}."),
+            });
+
+            for index in start..end {
+                events.push(TraceEvent::SortCompare {
+                    indices: [index, index + 1],
+                    message: format!(
+                        "Forward compare {} and {}.",
+                        values[index],
+                        values[index + 1]
+                    ),
+                });
+
+                if values[index] > values[index + 1] {
+                    values.swap(index, index + 1);
+                    swapped = true;
+                    events.push(TraceEvent::SortSwap {
+                        indices: [index, index + 1],
+                        values: values.clone(),
+                        message: format!("Swap positions {index} and {}.", index + 1),
+                    });
+                }
+            }
+
+            events.push(TraceEvent::SortMarkSorted {
+                indices: (end..len).collect(),
+                message: format!("Value at index {end} is fixed after the forward sweep."),
+            });
+
+            if !swapped {
+                break;
+            }
+
+            swapped = false;
+            end -= 1;
+            events.push(TraceEvent::SortPartition {
+                range: [start, end],
+                boundary: start,
+                scanner: end,
+                message: format!("Sweep backward from {end} to {start}."),
+            });
+
+            for index in (start + 1..=end).rev() {
+                events.push(TraceEvent::SortCompare {
+                    indices: [index - 1, index],
+                    message: format!(
+                        "Backward compare {} and {}.",
+                        values[index - 1],
+                        values[index]
+                    ),
+                });
+
+                if values[index - 1] > values[index] {
+                    values.swap(index - 1, index);
+                    swapped = true;
+                    events.push(TraceEvent::SortSwap {
+                        indices: [index - 1, index],
+                        values: values.clone(),
+                        message: format!("Swap positions {} and {index}.", index - 1),
+                    });
+                }
+            }
+
+            events.push(TraceEvent::SortMarkSorted {
+                indices: (0..=start).collect(),
+                message: format!("Value at index {start} is fixed after the backward sweep."),
+            });
+            start += 1;
+        }
+
+        events.push(TraceEvent::SortMarkSorted {
+            indices: (0..len).collect(),
+            message: "Bidirectional sweeps complete; values are sorted.".to_string(),
+        });
+    } else if len == 1 {
+        events.push(TraceEvent::SortMarkSorted {
+            indices: vec![0],
+            message: "Single value is already sorted.".to_string(),
+        });
+    }
+
+    let metadata = TraceMetadata {
+        algorithm_name: "Cocktail Shaker Sort".to_string(),
+        category: "Sorting".to_string(),
+        input_size: values.len(),
+        event_count: events.len(),
+        result_summary: format!("Sorted {} values.", values.len()),
+    };
+
+    Ok(Trace {
+        algorithm: AlgorithmId::CocktailShakerSort,
         initial_state: VisualizationState::Array {
             values: initial_values,
         },
@@ -3482,6 +3627,52 @@ mod tests {
     }
 
     #[test]
+    fn cocktail_shaker_sort_trace_sorts_values() {
+        let trace = trace_cocktail_shaker_sort(SortInput {
+            values: vec![9, 3, 7, 1, 4],
+        })
+        .expect("trace");
+
+        assert_eq!(
+            trace.final_state,
+            VisualizationState::Array {
+                values: vec![1, 3, 4, 7, 9]
+            }
+        );
+        assert!(
+            trace
+                .events
+                .iter()
+                .any(|event| matches!(event, TraceEvent::SortPartition { .. }))
+        );
+        assert!(
+            trace
+                .events
+                .iter()
+                .any(|event| matches!(event, TraceEvent::SortCompare { .. }))
+        );
+        assert!(
+            trace
+                .events
+                .iter()
+                .any(|event| matches!(event, TraceEvent::SortSwap { .. }))
+        );
+        assert_valid_sort_trace(&trace);
+    }
+
+    #[test]
+    fn cocktail_shaker_sort_handles_empty_input() {
+        let trace = trace_cocktail_shaker_sort(SortInput { values: vec![] }).expect("trace");
+
+        assert_eq!(
+            trace.final_state,
+            VisualizationState::Array { values: vec![] }
+        );
+        assert!(trace.events.is_empty());
+        assert_valid_sort_trace(&trace);
+    }
+
+    #[test]
     fn selection_sort_trace_sorts_values() {
         let trace = trace_selection_sort(SortInput {
             values: vec![9, 3, 7, 1, 4],
@@ -4081,6 +4272,7 @@ mod tests {
             AlgorithmId::Quicksort,
             AlgorithmId::InsertionSort,
             AlgorithmId::BubbleSort,
+            AlgorithmId::CocktailShakerSort,
             AlgorithmId::SelectionSort,
             AlgorithmId::ShellSort,
             AlgorithmId::CountingSort,
@@ -4104,6 +4296,7 @@ mod tests {
                 AlgorithmId::Quicksort
                 | AlgorithmId::InsertionSort
                 | AlgorithmId::BubbleSort
+                | AlgorithmId::CocktailShakerSort
                 | AlgorithmId::SelectionSort
                 | AlgorithmId::ShellSort
                 | AlgorithmId::CountingSort
@@ -4133,6 +4326,7 @@ mod tests {
             AlgorithmId::Quicksort
                 | AlgorithmId::InsertionSort
                 | AlgorithmId::BubbleSort
+                | AlgorithmId::CocktailShakerSort
                 | AlgorithmId::SelectionSort
                 | AlgorithmId::ShellSort
                 | AlgorithmId::CountingSort

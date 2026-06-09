@@ -48,6 +48,13 @@ describe("parseSortInput", () => {
       value: { values: [8, 3, 5] },
     });
   });
+
+  it("routes cocktail shaker sort custom input through the sort parser", () => {
+    expect(parseCustomInput("cocktailShakerSort", '{"values":[7,2,6]}')).toEqual({
+      type: "sort",
+      value: { values: [7, 2, 6] },
+    });
+  });
 });
 
 describe("parseGraphInput", () => {

@@ -2,6 +2,7 @@ export type AvailableAlgorithmId =
   | "quicksort"
   | "insertionSort"
   | "bubbleSort"
+  | "cocktailShakerSort"
   | "selectionSort"
   | "shellSort"
   | "countingSort"
@@ -44,6 +45,7 @@ export type AlgorithmOptions =
   | { type: "quicksort"; value: QuicksortOptions }
   | { type: "insertionSort"; value: InsertionSortOptions }
   | { type: "bubbleSort"; value: BubbleSortOptions }
+  | { type: "cocktailShakerSort"; value: CocktailShakerSortOptions }
   | { type: "selectionSort"; value: SelectionSortOptions }
   | { type: "shellSort"; value: ShellSortOptions }
   | { type: "countingSort"; value: CountingSortOptions }
@@ -68,6 +70,7 @@ export interface QuicksortOptions {
 
 export type InsertionSortOptions = Record<string, never>;
 export type BubbleSortOptions = Record<string, never>;
+export type CocktailShakerSortOptions = Record<string, never>;
 export type SelectionSortOptions = Record<string, never>;
 export type ShellSortOptions = Record<string, never>;
 export type CountingSortOptions = Record<string, never>;
