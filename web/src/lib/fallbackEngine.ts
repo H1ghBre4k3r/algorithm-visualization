@@ -54,6 +54,10 @@ export function generateTraceFallback(request: AlgorithmRequest): Trace {
     return traceMergesort(request.input.value);
   }
 
+  if (request.algorithm === "timsort" && request.input.type === "sort") {
+    return traceTimsort(request.input.value);
+  }
+
   if (request.algorithm === "heapSort" && request.input.type === "sort") {
     return traceHeapSort(request.input.value);
   }
@@ -1005,6 +1009,207 @@ function mergeRanges(values: number[], start: number, middle: number, end: numbe
     type: "sortMarkSorted",
     indices: Array.from({ length: end - start + 1 }, (_, index) => start + index),
     message: `Merged range ${start}..${end}.`,
+  });
+}
+
+function traceTimsort(input: SortInput): Trace {
+  const initialValues = [...input.values];
+  const values = [...input.values];
+  const events: TraceEvent[] = [];
+
+  if (values.length > 128) {
+    throw new Error("Timsort input is capped at 128 values for interactive playback.");
+  }
+
+  if (values.length > 0) {
+    const minRun = values.length < 16 ? values.length : 16;
+    let start = 0;
+    let runs: Array<[number, number]> = [];
+
+    while (start < values.length) {
+      let end = start + 1;
+      while (end < values.length) {
+        events.push({
+          type: "sortCompare",
+          indices: [end - 1, end],
+          message: `Detect run by comparing ${values[end - 1]} and ${values[end]}.`,
+        });
+        if (values[end - 1] <= values[end]) {
+          end += 1;
+        } else {
+          break;
+        }
+      }
+
+      const targetEnd = Math.min(start + minRun, values.length);
+      if (end < targetEnd) {
+        end = targetEnd;
+      }
+
+      events.push({
+        type: "sortPartition",
+        range: [start, end - 1],
+        boundary: start,
+        scanner: start,
+        message: `Prepare natural run ${start}..${end - 1}.`,
+      });
+      timsortInsertionRun(values, start, end, events);
+      events.push({
+        type: "sortMarkSorted",
+        indices: Array.from({ length: end - start }, (_, index) => start + index),
+        message: `Run ${start}..${end - 1} is internally sorted.`,
+      });
+      runs.push([start, end]);
+      start = end;
+    }
+
+    while (runs.length > 1) {
+      const merged: Array<[number, number]> = [];
+      let index = 0;
+      while (index < runs.length) {
+        if (index + 1 >= runs.length) {
+          merged.push(runs[index]);
+          index += 1;
+          continue;
+        }
+
+        const [leftStart, leftEnd] = runs[index];
+        const [, rightEnd] = runs[index + 1];
+        events.push({
+          type: "sortPartition",
+          range: [leftStart, rightEnd - 1],
+          boundary: leftEnd,
+          scanner: leftStart,
+          message: `Merge runs ${leftStart}..${leftEnd - 1} and ${leftEnd}..${rightEnd - 1}.`,
+        });
+        timsortMergeRuns(values, leftStart, leftEnd, rightEnd, events);
+        merged.push([leftStart, rightEnd]);
+        index += 2;
+      }
+      runs = merged;
+    }
+
+    events.push({
+      type: "sortMarkSorted",
+      indices: values.map((_, index) => index),
+      message: "All runs are merged into sorted order.",
+    });
+  }
+
+  return {
+    algorithm: "timsort",
+    initialState: { type: "array", values: initialValues },
+    finalState: { type: "array", values },
+    events,
+    metadata: {
+      algorithmName: "Timsort",
+      category: "Sorting",
+      inputSize: values.length,
+      eventCount: events.length,
+      resultSummary: `Sorted ${values.length} values.`,
+    },
+  };
+}
+
+function timsortInsertionRun(values: number[], start: number, end: number, events: TraceEvent[]) {
+  for (let index = start + 1; index < end; index += 1) {
+    let cursor = index;
+    events.push({
+      type: "sortPartition",
+      range: [start, end - 1],
+      boundary: cursor,
+      scanner: cursor,
+      message: `Insertion-sort run value at index ${index}.`,
+    });
+
+    while (cursor > start) {
+      events.push({
+        type: "sortCompare",
+        indices: [cursor - 1, cursor],
+        message: `Compare run values ${values[cursor - 1]} and ${values[cursor]}.`,
+      });
+
+      if (values[cursor - 1] <= values[cursor]) {
+        break;
+      }
+
+      swap(values, cursor - 1, cursor);
+      events.push({
+        type: "sortSwap",
+        indices: [cursor - 1, cursor],
+        values: [...values],
+        message: `Shift value left inside run ${start}..${end - 1}.`,
+      });
+      cursor -= 1;
+    }
+  }
+}
+
+function timsortMergeRuns(
+  values: number[],
+  start: number,
+  middle: number,
+  end: number,
+  events: TraceEvent[],
+) {
+  const left = values.slice(start, middle);
+  const right = values.slice(middle, end);
+  let leftIndex = 0;
+  let rightIndex = 0;
+  let writeIndex = start;
+
+  while (leftIndex < left.length && rightIndex < right.length) {
+    events.push({
+      type: "sortCompare",
+      indices: [start + leftIndex, middle + rightIndex],
+      message: `Compare run heads ${left[leftIndex]} and ${right[rightIndex]}.`,
+    });
+
+    if (left[leftIndex] <= right[rightIndex]) {
+      values[writeIndex] = left[leftIndex];
+      leftIndex += 1;
+    } else {
+      values[writeIndex] = right[rightIndex];
+      rightIndex += 1;
+    }
+
+    events.push({
+      type: "sortSwap",
+      indices: [writeIndex, writeIndex],
+      values: [...values],
+      message: `Write merged run value at index ${writeIndex}.`,
+    });
+    writeIndex += 1;
+  }
+
+  while (leftIndex < left.length) {
+    values[writeIndex] = left[leftIndex];
+    events.push({
+      type: "sortSwap",
+      indices: [writeIndex, writeIndex],
+      values: [...values],
+      message: `Copy remaining left run value to index ${writeIndex}.`,
+    });
+    leftIndex += 1;
+    writeIndex += 1;
+  }
+
+  while (rightIndex < right.length) {
+    values[writeIndex] = right[rightIndex];
+    events.push({
+      type: "sortSwap",
+      indices: [writeIndex, writeIndex],
+      values: [...values],
+      message: `Copy remaining right run value to index ${writeIndex}.`,
+    });
+    rightIndex += 1;
+    writeIndex += 1;
+  }
+
+  events.push({
+    type: "sortMarkSorted",
+    indices: Array.from({ length: end - start }, (_, index) => start + index),
+    message: `Merged Timsort run ${start}..${end - 1}.`,
   });
 }
 

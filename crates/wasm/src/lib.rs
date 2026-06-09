@@ -26,6 +26,7 @@ pub fn example_request_for(algorithm: &str) -> Result<JsValue, JsValue> {
         "bucketSort" => AlgorithmId::BucketSort,
         "combSort" => AlgorithmId::CombSort,
         "mergesort" => AlgorithmId::Mergesort,
+        "timsort" => AlgorithmId::Timsort,
         "heapSort" => AlgorithmId::HeapSort,
         "bfs" => AlgorithmId::Bfs,
         "dfs" => AlgorithmId::Dfs,

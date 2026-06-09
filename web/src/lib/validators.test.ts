@@ -55,6 +55,13 @@ describe("parseSortInput", () => {
       value: { values: [7, 2, 6] },
     });
   });
+
+  it("routes timsort custom input through the sort parser", () => {
+    expect(parseCustomInput("timsort", '{"values":[11,4,8]}')).toEqual({
+      type: "sort",
+      value: { values: [11, 4, 8] },
+    });
+  });
 });
 
 describe("parseGraphInput", () => {

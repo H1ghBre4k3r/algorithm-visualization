@@ -128,6 +128,13 @@ export const algorithms: AlgorithmCatalogItem[] = [
     summary: "Split ranges recursively and merge sorted runs back together.",
   },
   {
+    id: "timsort",
+    label: "Timsort",
+    category: "sorting",
+    status: "available",
+    summary: "Detect natural runs, polish them, and merge adaptively.",
+  },
+  {
     id: "heapSort",
     label: "Heap Sort",
     category: "sorting",

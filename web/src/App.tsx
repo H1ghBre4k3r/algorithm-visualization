@@ -61,6 +61,7 @@ export default function App() {
     bucketSort: customTemplate("bucketSort"),
     combSort: customTemplate("combSort"),
     mergesort: customTemplate("mergesort"),
+    timsort: customTemplate("timsort"),
     heapSort: customTemplate("heapSort"),
     bfs: customTemplate("bfs"),
     dfs: customTemplate("dfs"),
@@ -504,6 +505,9 @@ function optionsForAlgorithm(algorithm: AvailableAlgorithmId): AlgorithmRequest[
   if (algorithm === "mergesort") {
     return { type: "mergesort", value: {} };
   }
+  if (algorithm === "timsort") {
+    return { type: "timsort", value: {} };
+  }
   if (algorithm === "heapSort") {
     return { type: "heapSort", value: {} };
   }
@@ -553,6 +557,7 @@ function isSortAlgorithm(algorithm: AvailableAlgorithmId) {
     algorithm === "bucketSort" ||
     algorithm === "combSort" ||
     algorithm === "mergesort" ||
+    algorithm === "timsort" ||
     algorithm === "heapSort"
   );
 }

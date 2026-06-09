@@ -41,6 +41,7 @@ Reference: https://impeccable.style
   - Cocktail sweep: violet shrinking range with amber forward/backward comparisons.
   - Bubble pass fixed tail: green.
   - Merge range: violet range wash with amber comparisons.
+  - Timsort run: violet natural-run bands with amber run-head comparisons.
   - Heap range: violet range wash with green fixed tail.
   - Swap: red.
   - Fixed/sorted: green.

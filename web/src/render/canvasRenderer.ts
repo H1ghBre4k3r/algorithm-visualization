@@ -49,6 +49,7 @@ export function drawTrace(canvas: HTMLCanvasElement, trace: Trace, step: number)
       trace.algorithm === "bucketSort" ||
       trace.algorithm === "combSort" ||
       trace.algorithm === "mergesort" ||
+      trace.algorithm === "timsort" ||
       trace.algorithm === "heapSort") &&
     trace.initialState.type === "array"
   ) {

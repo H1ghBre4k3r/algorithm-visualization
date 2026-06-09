@@ -17,6 +17,7 @@ pub enum AlgorithmId {
     BucketSort,
     CombSort,
     Mergesort,
+    Timsort,
     HeapSort,
     Bfs,
     Dfs,
@@ -69,6 +70,7 @@ pub enum AlgorithmOptions {
     BucketSort(BucketSortOptions),
     CombSort(CombSortOptions),
     Mergesort(MergesortOptions),
+    Timsort(TimsortOptions),
     HeapSort(HeapSortOptions),
     Bfs(BfsOptions),
     Dfs(DfsOptions),
@@ -131,6 +133,10 @@ pub struct CombSortOptions {}
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct MergesortOptions {}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct TimsortOptions {}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
@@ -444,6 +450,7 @@ pub fn generate_trace(request: AlgorithmRequest) -> Result<Trace, AlgorithmError
         (AlgorithmId::BucketSort, InputData::Sort(input)) => trace_bucket_sort(input),
         (AlgorithmId::CombSort, InputData::Sort(input)) => trace_comb_sort(input),
         (AlgorithmId::Mergesort, InputData::Sort(input)) => trace_mergesort(input),
+        (AlgorithmId::Timsort, InputData::Sort(input)) => trace_timsort(input),
         (AlgorithmId::HeapSort, InputData::Sort(input)) => trace_heap_sort(input),
         (AlgorithmId::Bfs, InputData::Graph(input)) => {
             let stop_at_target = match request.options {
@@ -510,6 +517,9 @@ pub fn generate_trace(request: AlgorithmRequest) -> Result<Trace, AlgorithmError
         )),
         (AlgorithmId::Mergesort, _) => Err(AlgorithmError::new(
             "Mergesort requires sort input with a values array.",
+        )),
+        (AlgorithmId::Timsort, _) => Err(AlgorithmError::new(
+            "Timsort requires sort input with a values array.",
         )),
         (AlgorithmId::HeapSort, _) => Err(AlgorithmError::new(
             "Heap Sort requires sort input with a values array.",
@@ -643,6 +653,14 @@ pub fn example_request(algorithm: AlgorithmId) -> AlgorithmRequest {
                 values: vec![42, 12, 77, 18, 93, 31, 64, 5, 56, 29],
             }),
             options: Some(AlgorithmOptions::Mergesort(MergesortOptions::default())),
+        },
+        AlgorithmId::Timsort => AlgorithmRequest {
+            algorithm,
+            input_mode: InputMode::Example,
+            input: InputData::Sort(SortInput {
+                values: vec![42, 12, 77, 18, 93, 31, 64, 5, 56, 29],
+            }),
+            options: Some(AlgorithmOptions::Timsort(TimsortOptions::default())),
         },
         AlgorithmId::HeapSort => AlgorithmRequest {
             algorithm,
@@ -1613,6 +1631,115 @@ pub fn trace_mergesort(input: SortInput) -> Result<Trace, AlgorithmError> {
     })
 }
 
+pub fn trace_timsort(input: SortInput) -> Result<Trace, AlgorithmError> {
+    if input.values.len() > 128 {
+        return Err(AlgorithmError::new(
+            "Timsort input is capped at 128 values for interactive playback.",
+        ));
+    }
+
+    let initial_values = input.values.clone();
+    let mut values = input.values;
+    let mut events = Vec::new();
+    let len = values.len();
+
+    if len > 0 {
+        let min_run = if len < 16 { len } else { 16 };
+        let mut runs = Vec::<(usize, usize)>::new();
+        let mut start = 0;
+
+        while start < len {
+            let mut end = start + 1;
+            while end < len {
+                events.push(TraceEvent::SortCompare {
+                    indices: [end - 1, end],
+                    message: format!(
+                        "Detect run by comparing {} and {}.",
+                        values[end - 1],
+                        values[end]
+                    ),
+                });
+                if values[end - 1] <= values[end] {
+                    end += 1;
+                } else {
+                    break;
+                }
+            }
+
+            let target_end = (start + min_run).min(len);
+            if end < target_end {
+                end = target_end;
+            }
+
+            events.push(TraceEvent::SortPartition {
+                range: [start, end - 1],
+                boundary: start,
+                scanner: start,
+                message: format!("Prepare natural run {start}..{}.", end - 1),
+            });
+            timsort_insertion_run(&mut values, start, end, &mut events);
+            events.push(TraceEvent::SortMarkSorted {
+                indices: (start..end).collect(),
+                message: format!("Run {start}..{} is internally sorted.", end - 1),
+            });
+            runs.push((start, end));
+            start = end;
+        }
+
+        while runs.len() > 1 {
+            let mut merged = Vec::<(usize, usize)>::new();
+            let mut index = 0;
+            while index < runs.len() {
+                if index + 1 >= runs.len() {
+                    merged.push(runs[index]);
+                    index += 1;
+                    continue;
+                }
+
+                let (left_start, left_end) = runs[index];
+                let (_, right_end) = runs[index + 1];
+                events.push(TraceEvent::SortPartition {
+                    range: [left_start, right_end - 1],
+                    boundary: left_end,
+                    scanner: left_start,
+                    message: format!(
+                        "Merge runs {left_start}..{} and {left_end}..{}.",
+                        left_end - 1,
+                        right_end - 1
+                    ),
+                });
+                timsort_merge_runs(&mut values, left_start, left_end, right_end, &mut events);
+                merged.push((left_start, right_end));
+                index += 2;
+            }
+            runs = merged;
+        }
+
+        events.push(TraceEvent::SortMarkSorted {
+            indices: (0..len).collect(),
+            message: "All runs are merged into sorted order.".to_string(),
+        });
+    }
+
+    let metadata = TraceMetadata {
+        algorithm_name: "Timsort".to_string(),
+        category: "Sorting".to_string(),
+        input_size: values.len(),
+        event_count: events.len(),
+        result_summary: format!("Sorted {} values.", values.len()),
+    };
+
+    Ok(Trace {
+        algorithm: AlgorithmId::Timsort,
+        initial_state: VisualizationState::Array {
+            values: initial_values,
+        },
+        final_state: VisualizationState::Array { values },
+        events,
+        metadata,
+    })
+}
+
 pub fn trace_heap_sort(input: SortInput) -> Result<Trace, AlgorithmError> {
     if input.values.len() > 128 {
         return Err(AlgorithmError::new(
@@ -1832,6 +1959,112 @@ fn merge_ranges(
     events.push(TraceEvent::SortMarkSorted {
         indices: (start..=end).collect(),
         message: format!("Merged range {start}..{end}."),
+    });
+}
+
+fn timsort_insertion_run(
+    values: &mut [i32],
+    start: usize,
+    end: usize,
+    events: &mut Vec<TraceEvent>,
+) {
+    for index in start + 1..end {
+        let mut cursor = index;
+        events.push(TraceEvent::SortPartition {
+            range: [start, end - 1],
+            boundary: cursor,
+            scanner: cursor,
+            message: format!("Insertion-sort run value at index {index}."),
+        });
+
+        while cursor > start {
+            events.push(TraceEvent::SortCompare {
+                indices: [cursor - 1, cursor],
+                message: format!(
+                    "Compare run values {} and {}.",
+                    values[cursor - 1],
+                    values[cursor]
+                ),
+            });
+
+            if values[cursor - 1] <= values[cursor] {
+                break;
+            }
+
+            values.swap(cursor - 1, cursor);
+            events.push(TraceEvent::SortSwap {
+                indices: [cursor - 1, cursor],
+                values: values.to_vec(),
+                message: format!("Shift value left inside run {start}..{}.", end - 1),
+            });
+            cursor -= 1;
+        }
+    }
+}
+
+fn timsort_merge_runs(
+    values: &mut [i32],
+    start: usize,
+    middle: usize,
+    end: usize,
+    events: &mut Vec<TraceEvent>,
+) {
+    let left = values[start..middle].to_vec();
+    let right = values[middle..end].to_vec();
+    let mut left_index = 0;
+    let mut right_index = 0;
+    let mut write_index = start;
+
+    while left_index < left.len() && right_index < right.len() {
+        events.push(TraceEvent::SortCompare {
+            indices: [start + left_index, middle + right_index],
+            message: format!(
+                "Compare run heads {} and {}.",
+                left[left_index], right[right_index]
+            ),
+        });
+
+        if left[left_index] <= right[right_index] {
+            values[write_index] = left[left_index];
+            left_index += 1;
+        } else {
+            values[write_index] = right[right_index];
+            right_index += 1;
+        }
+
+        events.push(TraceEvent::SortSwap {
+            indices: [write_index, write_index],
+            values: values.to_vec(),
+            message: format!("Write merged run value at index {write_index}."),
+        });
+        write_index += 1;
+    }
+
+    while left_index < left.len() {
+        values[write_index] = left[left_index];
+        events.push(TraceEvent::SortSwap {
+            indices: [write_index, write_index],
+            values: values.to_vec(),
+            message: format!("Copy remaining left run value to index {write_index}."),
+        });
+        left_index += 1;
+        write_index += 1;
+    }
+
+    while right_index < right.len() {
+        values[write_index] = right[right_index];
+        events.push(TraceEvent::SortSwap {
+            indices: [write_index, write_index],
+            values: values.to_vec(),
+            message: format!("Copy remaining right run value to index {write_index}."),
+        });
+        right_index += 1;
+        write_index += 1;
+    }
+
+    events.push(TraceEvent::SortMarkSorted {
+        indices: (start..end).collect(),
+        message: format!("Merged Timsort run {start}..{}.", end - 1),
     });
 }
 
@@ -3941,6 +4174,56 @@ mod tests {
     }
 
     #[test]
+    fn timsort_trace_sorts_values() {
+        let trace = trace_timsort(SortInput {
+            values: vec![
+                20, 21, 22, 9, 3, 7, 1, 4, 30, 31, 18, 12, 11, 10, 40, 41, 5, 6,
+            ],
+        })
+        .expect("trace");
+
+        assert_eq!(
+            trace.final_state,
+            VisualizationState::Array {
+                values: vec![
+                    1, 3, 4, 5, 6, 7, 9, 10, 11, 12, 18, 20, 21, 22, 30, 31, 40, 41
+                ]
+            }
+        );
+        assert!(
+            trace
+                .events
+                .iter()
+                .any(|event| matches!(event, TraceEvent::SortPartition { .. }))
+        );
+        assert!(
+            trace
+                .events
+                .iter()
+                .any(|event| matches!(event, TraceEvent::SortCompare { .. }))
+        );
+        assert!(
+            trace
+                .events
+                .iter()
+                .any(|event| matches!(event, TraceEvent::SortSwap { .. }))
+        );
+        assert_valid_sort_trace(&trace);
+    }
+
+    #[test]
+    fn timsort_handles_empty_input() {
+        let trace = trace_timsort(SortInput { values: vec![] }).expect("trace");
+
+        assert_eq!(
+            trace.final_state,
+            VisualizationState::Array { values: vec![] }
+        );
+        assert!(trace.events.is_empty());
+        assert_valid_sort_trace(&trace);
+    }
+
+    #[test]
     fn heap_sort_trace_sorts_values() {
         let trace = trace_heap_sort(SortInput {
             values: vec![9, 3, 7, 1, 4],
@@ -4280,6 +4563,7 @@ mod tests {
             AlgorithmId::BucketSort,
             AlgorithmId::CombSort,
             AlgorithmId::Mergesort,
+            AlgorithmId::Timsort,
             AlgorithmId::HeapSort,
             AlgorithmId::Bfs,
             AlgorithmId::Dfs,
@@ -4304,6 +4588,7 @@ mod tests {
                 | AlgorithmId::BucketSort
                 | AlgorithmId::CombSort
                 | AlgorithmId::Mergesort
+                | AlgorithmId::Timsort
                 | AlgorithmId::HeapSort => assert_valid_sort_trace(&trace),
                 AlgorithmId::Bfs
                 | AlgorithmId::Dfs
@@ -4334,6 +4619,7 @@ mod tests {
                 | AlgorithmId::BucketSort
                 | AlgorithmId::CombSort
                 | AlgorithmId::Mergesort
+                | AlgorithmId::Timsort
                 | AlgorithmId::HeapSort
         ));
         assert_eq!(trace.metadata.event_count, trace.events.len());
