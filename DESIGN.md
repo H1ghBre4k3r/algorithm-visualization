@@ -37,6 +37,7 @@ Reference: https://impeccable.style
   - Source: blue.
   - Target: orange.
   - Active frontier: amber.
+  - Discovered traversal depth: blue labels.
   - Final path or selected tree edges: green.
 - Sequence:
   - Active comparison: amber.

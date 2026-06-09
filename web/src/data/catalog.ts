@@ -58,6 +58,13 @@ export const algorithms: AlgorithmCatalogItem[] = [
     summary: "Partition an array around pivots until every range is ordered.",
   },
   {
+    id: "bfs",
+    label: "Breadth-First Search",
+    category: "graph",
+    status: "available",
+    summary: "Explore neighbors by layers to find unweighted shortest paths.",
+  },
+  {
     id: "dijkstra",
     label: "Dijkstra",
     category: "graph",

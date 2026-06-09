@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt;
 
 use serde::{Deserialize, Serialize};
@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "camelCase")]
 pub enum AlgorithmId {
     Quicksort,
+    Bfs,
     Dijkstra,
     PrimMst,
     Kmp,
@@ -43,6 +44,7 @@ pub enum InputData {
 #[serde(tag = "type", content = "value", rename_all = "camelCase")]
 pub enum AlgorithmOptions {
     Quicksort(QuicksortOptions),
+    Bfs(BfsOptions),
     Dijkstra(DijkstraOptions),
     PrimMst(PrimMstOptions),
     Kmp(KmpOptions),
@@ -58,6 +60,13 @@ pub struct QuicksortOptions {
 
 fn default_pivot_strategy() -> String {
     "last".to_string()
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BfsOptions {
+    #[serde(default)]
+    pub stop_at_target: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -323,6 +332,13 @@ impl std::error::Error for AlgorithmError {}
 pub fn generate_trace(request: AlgorithmRequest) -> Result<Trace, AlgorithmError> {
     match (request.algorithm, request.input) {
         (AlgorithmId::Quicksort, InputData::Sort(input)) => trace_quicksort(input),
+        (AlgorithmId::Bfs, InputData::Graph(input)) => {
+            let stop_at_target = match request.options {
+                Some(AlgorithmOptions::Bfs(options)) => options.stop_at_target,
+                _ => true,
+            };
+            trace_bfs(input, stop_at_target)
+        }
         (AlgorithmId::Dijkstra, InputData::Graph(input)) => {
             let stop_at_target = match request.options {
                 Some(AlgorithmOptions::Dijkstra(options)) => options.stop_at_target,
@@ -335,6 +351,9 @@ pub fn generate_trace(request: AlgorithmRequest) -> Result<Trace, AlgorithmError
         (AlgorithmId::Levenshtein, InputData::Sequence(input)) => trace_levenshtein(input),
         (AlgorithmId::Quicksort, _) => Err(AlgorithmError::new(
             "Quicksort requires sort input with a values array.",
+        )),
+        (AlgorithmId::Bfs, _) => Err(AlgorithmError::new(
+            "Breadth-first search requires graph input with nodes, edges, source, and target.",
         )),
         (AlgorithmId::Dijkstra, _) => Err(AlgorithmError::new(
             "Dijkstra requires graph input with nodes, edges, source, and target.",
@@ -361,6 +380,14 @@ pub fn example_request(algorithm: AlgorithmId) -> AlgorithmRequest {
             }),
             options: Some(AlgorithmOptions::Quicksort(QuicksortOptions {
                 pivot_strategy: default_pivot_strategy(),
+            })),
+        },
+        AlgorithmId::Bfs => AlgorithmRequest {
+            algorithm,
+            input_mode: InputMode::Example,
+            input: InputData::Graph(example_graph()),
+            options: Some(AlgorithmOptions::Bfs(BfsOptions {
+                stop_at_target: true,
             })),
         },
         AlgorithmId::Dijkstra => AlgorithmRequest {
@@ -521,6 +548,158 @@ fn quicksort_range(values: &mut [i32], low: usize, high: usize, events: &mut Vec
             quicksort_range(values, right_low, high, events);
         }
     }
+}
+
+pub fn trace_bfs(input: GraphInput, stop_at_target: bool) -> Result<Trace, AlgorithmError> {
+    validate_graph(&input)?;
+
+    let node_order = input
+        .nodes
+        .iter()
+        .map(|node| node.id.clone())
+        .collect::<Vec<_>>();
+    let adjacency = build_adjacency(&input.edges);
+    let mut distances: HashMap<String, Option<u32>> =
+        node_order.iter().map(|node| (node.clone(), None)).collect();
+    let mut previous: HashMap<String, String> = HashMap::new();
+    let mut discovered = HashSet::new();
+    let mut queue = VecDeque::new();
+    let mut events = Vec::new();
+
+    distances.insert(input.source.clone(), Some(0));
+    discovered.insert(input.source.clone());
+    queue.push_back(input.source.clone());
+
+    while let Some(node) = queue.pop_front() {
+        let distance = distances.get(&node).copied().flatten().unwrap_or(0);
+        events.push(TraceEvent::GraphVisit {
+            node: node.clone(),
+            distance,
+            message: format!("Visit node {node} at breadth-first depth {distance}."),
+        });
+
+        if stop_at_target && input.target.as_ref() == Some(&node) {
+            events.push(TraceEvent::GraphSettle {
+                node: node.clone(),
+                distance,
+                message: format!("Reached target node {node}."),
+            });
+            break;
+        }
+
+        if let Some(edges) = adjacency.get(&node) {
+            for edge in edges {
+                events.push(TraceEvent::GraphConsiderEdge {
+                    edge_id: edge.edge_id.clone(),
+                    from: node.clone(),
+                    to: edge.to.clone(),
+                    weight: edge.weight,
+                    message: format!("Inspect edge {} from {node} to {}.", edge.edge_id, edge.to),
+                });
+
+                if discovered.contains(&edge.to) {
+                    events.push(TraceEvent::GraphRelaxEdge {
+                        edge_id: edge.edge_id.clone(),
+                        from: node.clone(),
+                        to: edge.to.clone(),
+                        weight: edge.weight,
+                        previous_distance: distances.get(&edge.to).copied().flatten(),
+                        new_distance: distances.get(&edge.to).copied().flatten(),
+                        improved: false,
+                        message: format!("{} was already discovered.", edge.to),
+                    });
+                    continue;
+                }
+
+                let next_distance = distance + 1;
+                discovered.insert(edge.to.clone());
+                queue.push_back(edge.to.clone());
+                distances.insert(edge.to.clone(), Some(next_distance));
+                previous.insert(edge.to.clone(), node.clone());
+                events.push(TraceEvent::GraphRelaxEdge {
+                    edge_id: edge.edge_id.clone(),
+                    from: node.clone(),
+                    to: edge.to.clone(),
+                    weight: edge.weight,
+                    previous_distance: None,
+                    new_distance: Some(next_distance),
+                    improved: true,
+                    message: format!("Discover {} at depth {next_distance}.", edge.to),
+                });
+            }
+        }
+
+        events.push(TraceEvent::GraphSettle {
+            node: node.clone(),
+            distance,
+            message: format!("Finish scanning node {node}."),
+        });
+    }
+
+    let (path, total_distance) = input
+        .target
+        .as_ref()
+        .map(|target| reconstruct_path(&input.source, target, &previous, &distances))
+        .unwrap_or_default();
+
+    if input.target.is_some() {
+        events.push(TraceEvent::GraphPath {
+            nodes: path.clone(),
+            total_distance,
+            message: match total_distance {
+                Some(distance) => format!("Shortest unweighted path has {distance} edges."),
+                None => "No path reaches the selected target.".to_string(),
+            },
+        });
+    }
+
+    let initial_distances = node_order
+        .iter()
+        .map(|node| NodeDistance {
+            node: node.clone(),
+            distance: if *node == input.source { Some(0) } else { None },
+        })
+        .collect::<Vec<_>>();
+    let final_distances = node_order
+        .iter()
+        .map(|node| NodeDistance {
+            node: node.clone(),
+            distance: distances.get(node).copied().flatten(),
+        })
+        .collect::<Vec<_>>();
+
+    let metadata = TraceMetadata {
+        algorithm_name: "Breadth-First Search".to_string(),
+        category: "Graph".to_string(),
+        input_size: input.nodes.len(),
+        event_count: events.len(),
+        result_summary: match total_distance {
+            Some(distance) => format!("Shortest unweighted path has {distance} edges."),
+            None => "No reachable target path found.".to_string(),
+        },
+    };
+
+    Ok(Trace {
+        algorithm: AlgorithmId::Bfs,
+        initial_state: VisualizationState::Graph {
+            nodes: input.nodes.clone(),
+            edges: input.edges.clone(),
+            source: input.source.clone(),
+            target: input.target.clone(),
+            distances: initial_distances,
+            path: Vec::new(),
+        },
+        final_state: VisualizationState::Graph {
+            nodes: input.nodes,
+            edges: input.edges,
+            source: input.source,
+            target: input.target,
+            distances: final_distances,
+            path,
+        },
+        events,
+        metadata,
+    })
 }
 
 pub fn trace_dijkstra(input: GraphInput, stop_at_target: bool) -> Result<Trace, AlgorithmError> {
@@ -1338,6 +1517,34 @@ mod tests {
     }
 
     #[test]
+    fn bfs_trace_finds_shortest_unweighted_path() {
+        let trace = trace_bfs(example_graph(), true).expect("trace");
+
+        let path = trace.events.iter().find_map(|event| match event {
+            TraceEvent::GraphPath {
+                nodes,
+                total_distance,
+                ..
+            } => Some((nodes.clone(), *total_distance)),
+            _ => None,
+        });
+
+        assert_eq!(
+            path,
+            Some((
+                vec![
+                    "A".to_string(),
+                    "B".to_string(),
+                    "D".to_string(),
+                    "F".to_string()
+                ],
+                Some(3)
+            ))
+        );
+        assert_valid_graph_trace(&trace);
+    }
+
+    #[test]
     fn dijkstra_trace_finds_shortest_path() {
         let trace = trace_dijkstra(example_graph(), true).expect("trace");
 
@@ -1485,6 +1692,7 @@ mod tests {
     fn example_requests_generate_valid_traces() {
         for algorithm in [
             AlgorithmId::Quicksort,
+            AlgorithmId::Bfs,
             AlgorithmId::Dijkstra,
             AlgorithmId::PrimMst,
             AlgorithmId::Kmp,
@@ -1493,7 +1701,9 @@ mod tests {
             let trace = generate_trace(example_request(algorithm)).expect("trace");
             match algorithm {
                 AlgorithmId::Quicksort => assert_valid_sort_trace(&trace),
-                AlgorithmId::Dijkstra | AlgorithmId::PrimMst => assert_valid_graph_trace(&trace),
+                AlgorithmId::Bfs | AlgorithmId::Dijkstra | AlgorithmId::PrimMst => {
+                    assert_valid_graph_trace(&trace)
+                }
                 AlgorithmId::Kmp | AlgorithmId::Levenshtein => assert_valid_sequence_trace(&trace),
             }
         }
@@ -1560,7 +1770,7 @@ mod tests {
 
         assert!(matches!(
             trace.algorithm,
-            AlgorithmId::Dijkstra | AlgorithmId::PrimMst
+            AlgorithmId::Bfs | AlgorithmId::Dijkstra | AlgorithmId::PrimMst
         ));
         assert_eq!(trace.metadata.event_count, trace.events.len());
 

@@ -66,6 +66,15 @@ export function exampleRequest(algorithm: AvailableAlgorithmId): AlgorithmReques
     };
   }
 
+  if (algorithm === "bfs") {
+    return {
+      algorithm,
+      inputMode: "example",
+      input: { type: "graph", value: structuredClone(exampleGraphInput) },
+      options: { type: "bfs", value: { stopAtTarget: true } },
+    };
+  }
+
   if (algorithm === "primMst") {
     return {
       algorithm,

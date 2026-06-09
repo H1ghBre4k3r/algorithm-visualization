@@ -1,4 +1,4 @@
-export type AvailableAlgorithmId = "quicksort" | "dijkstra" | "primMst" | "kmp" | "levenshtein";
+export type AvailableAlgorithmId = "quicksort" | "bfs" | "dijkstra" | "primMst" | "kmp" | "levenshtein";
 export type PlannedAlgorithmId =
   | "boyerMoore"
   | "prefixTrie"
@@ -22,6 +22,7 @@ export type InputData =
 
 export type AlgorithmOptions =
   | { type: "quicksort"; value: QuicksortOptions }
+  | { type: "bfs"; value: BfsOptions }
   | { type: "dijkstra"; value: DijkstraOptions }
   | { type: "primMst"; value: PrimMstOptions }
   | { type: "kmp"; value: KmpOptions }
@@ -29,6 +30,10 @@ export type AlgorithmOptions =
 
 export interface QuicksortOptions {
   pivotStrategy: "last";
+}
+
+export interface BfsOptions {
+  stopAtTarget: boolean;
 }
 
 export interface DijkstraOptions {

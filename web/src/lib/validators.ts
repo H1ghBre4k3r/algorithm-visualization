@@ -57,13 +57,13 @@ export function parseGraphInput(raw: string): GraphInput {
   const target = parsed.target ?? null;
 
   if (!Array.isArray(nodesRaw) || nodesRaw.length === 0) {
-    throw new InputValidationError("Dijkstra input needs a non-empty nodes array.");
+    throw new InputValidationError("Graph input needs a non-empty nodes array.");
   }
   if (!Array.isArray(edgesRaw)) {
-    throw new InputValidationError("Dijkstra input needs an edges array.");
+    throw new InputValidationError("Graph input needs an edges array.");
   }
   if (typeof source !== "string" || source.trim() === "") {
-    throw new InputValidationError("Dijkstra input needs a source node id.");
+    throw new InputValidationError("Graph input needs a source node id.");
   }
   if (target !== null && typeof target !== "string") {
     throw new InputValidationError("Target must be a node id string or null.");

@@ -41,7 +41,10 @@ export function drawTrace(canvas: HTMLCanvasElement, trace: Trace, step: number)
     drawSortTrace(context, width, height, trace, step);
   }
 
-  if ((trace.algorithm === "dijkstra" || trace.algorithm === "primMst") && trace.initialState.type === "graph") {
+  if (
+    (trace.algorithm === "bfs" || trace.algorithm === "dijkstra" || trace.algorithm === "primMst") &&
+    trace.initialState.type === "graph"
+  ) {
     drawGraphTrace(context, width, height, trace, step);
   }
 

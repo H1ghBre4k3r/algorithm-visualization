@@ -20,6 +20,11 @@ export function generateTraceFallback(request: AlgorithmRequest): Trace {
     return traceDijkstra(request.input.value, stopAtTarget);
   }
 
+  if (request.algorithm === "bfs" && request.input.type === "graph") {
+    const stopAtTarget = request.options?.type === "bfs" ? request.options.value.stopAtTarget : true;
+    return traceBfs(request.input.value, stopAtTarget);
+  }
+
   if (request.algorithm === "primMst" && request.input.type === "graph") {
     return tracePrimMst(request.input.value);
   }
@@ -158,6 +163,151 @@ function quicksortRange(values: number[], low: number, high: number, events: Tra
       quicksortRange(values, rightLow, high, events);
     }
   }
+}
+
+function traceBfs(input: GraphInput, stopAtTarget: boolean): Trace {
+  validateGraph(input);
+
+  const nodeOrder = input.nodes.map((node) => node.id);
+  const adjacency = buildAdjacency(input.edges);
+  const distances = new Map<string, number | null>(nodeOrder.map((node) => [node, null]));
+  const previous = new Map<string, string>();
+  const discovered = new Set<string>([input.source]);
+  const queue = [input.source];
+  const events: TraceEvent[] = [];
+
+  distances.set(input.source, 0);
+
+  while (queue.length > 0) {
+    const node = queue.shift() as string;
+    const distance = distances.get(node) ?? 0;
+
+    events.push({
+      type: "graphVisit",
+      node,
+      distance,
+      message: `Visit node ${node} at breadth-first depth ${distance}.`,
+    });
+
+    if (stopAtTarget && input.target === node) {
+      events.push({
+        type: "graphSettle",
+        node,
+        distance,
+        message: `Reached target node ${node}.`,
+      });
+      break;
+    }
+
+    for (const edge of adjacency.get(node) ?? []) {
+      events.push({
+        type: "graphConsiderEdge",
+        edgeId: edge.edgeId,
+        from: node,
+        to: edge.to,
+        weight: edge.weight,
+        message: `Inspect edge ${edge.edgeId} from ${node} to ${edge.to}.`,
+      });
+
+      if (discovered.has(edge.to)) {
+        const previousDistance = distances.get(edge.to) ?? null;
+        events.push({
+          type: "graphRelaxEdge",
+          edgeId: edge.edgeId,
+          from: node,
+          to: edge.to,
+          weight: edge.weight,
+          previousDistance,
+          newDistance: previousDistance,
+          improved: false,
+          message: `${edge.to} was already discovered.`,
+        });
+        continue;
+      }
+
+      const nextDistance = distance + 1;
+      discovered.add(edge.to);
+      queue.push(edge.to);
+      distances.set(edge.to, nextDistance);
+      previous.set(edge.to, node);
+      events.push({
+        type: "graphRelaxEdge",
+        edgeId: edge.edgeId,
+        from: node,
+        to: edge.to,
+        weight: edge.weight,
+        previousDistance: null,
+        newDistance: nextDistance,
+        improved: true,
+        message: `Discover ${edge.to} at depth ${nextDistance}.`,
+      });
+    }
+
+    events.push({
+      type: "graphSettle",
+      node,
+      distance,
+      message: `Finish scanning node ${node}.`,
+    });
+  }
+
+  const [path, totalDistance] = input.target
+    ? reconstructPath(input.source, input.target, previous, distances)
+    : [[], null];
+
+  if (input.target) {
+    events.push({
+      type: "graphPath",
+      nodes: path,
+      totalDistance,
+      message:
+        totalDistance === null
+          ? "No path reaches the selected target."
+          : `Shortest unweighted path has ${totalDistance} edges.`,
+    });
+  }
+
+  const initialDistances = nodeOrder.map<NodeDistance>((node) => ({
+    node,
+    distance: node === input.source ? 0 : null,
+  }));
+  const finalDistances = nodeOrder.map<NodeDistance>((node) => ({
+    node,
+    distance: distances.get(node) ?? null,
+  }));
+
+  return {
+    algorithm: "bfs",
+    initialState: {
+      type: "graph",
+      nodes: input.nodes,
+      edges: input.edges,
+      source: input.source,
+      target: input.target ?? null,
+      distances: initialDistances,
+      path: [],
+    },
+    finalState: {
+      type: "graph",
+      nodes: input.nodes,
+      edges: input.edges,
+      source: input.source,
+      target: input.target ?? null,
+      distances: finalDistances,
+      path,
+    },
+    events,
+    metadata: {
+      algorithmName: "Breadth-First Search",
+      category: "Graph",
+      inputSize: input.nodes.length,
+      eventCount: events.length,
+      resultSummary:
+        totalDistance === null
+          ? "No reachable target path found."
+          : `Shortest unweighted path has ${totalDistance} edges.`,
+    },
+  };
 }
 
 function traceDijkstra(input: GraphInput, stopAtTarget: boolean): Trace {
