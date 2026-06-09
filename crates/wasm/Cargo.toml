@@ -1,0 +1,12 @@
+[package]
+name = "algorithm_visualization_wasm"
+version.workspace = true
+edition.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+algorithm_core.workspace = true
+serde-wasm-bindgen.workspace = true
+wasm-bindgen.workspace = true
