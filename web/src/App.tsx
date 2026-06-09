@@ -54,6 +54,7 @@ export default function App() {
     insertionSort: customTemplate("insertionSort"),
     bubbleSort: customTemplate("bubbleSort"),
     mergesort: customTemplate("mergesort"),
+    heapSort: customTemplate("heapSort"),
     bfs: customTemplate("bfs"),
     dfs: customTemplate("dfs"),
     dijkstra: customTemplate("dijkstra"),
@@ -472,6 +473,9 @@ function optionsForAlgorithm(algorithm: AvailableAlgorithmId): AlgorithmRequest[
   if (algorithm === "mergesort") {
     return { type: "mergesort", value: {} };
   }
+  if (algorithm === "heapSort") {
+    return { type: "heapSort", value: {} };
+  }
   if (algorithm === "kmp") {
     return { type: "kmp", value: {} };
   }
@@ -501,7 +505,8 @@ function isSortAlgorithm(algorithm: AvailableAlgorithmId) {
     algorithm === "quicksort" ||
     algorithm === "insertionSort" ||
     algorithm === "bubbleSort" ||
-    algorithm === "mergesort"
+    algorithm === "mergesort" ||
+    algorithm === "heapSort"
   );
 }
 

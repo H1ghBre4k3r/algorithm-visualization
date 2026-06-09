@@ -10,6 +10,7 @@ pub enum AlgorithmId {
     InsertionSort,
     BubbleSort,
     Mergesort,
+    HeapSort,
     Bfs,
     Dfs,
     Dijkstra,
@@ -51,6 +52,7 @@ pub enum AlgorithmOptions {
     InsertionSort(InsertionSortOptions),
     BubbleSort(BubbleSortOptions),
     Mergesort(MergesortOptions),
+    HeapSort(HeapSortOptions),
     Bfs(BfsOptions),
     Dfs(DfsOptions),
     Dijkstra(DijkstraOptions),
@@ -81,6 +83,10 @@ pub struct BubbleSortOptions {}
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct MergesortOptions {}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct HeapSortOptions {}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -362,6 +368,7 @@ pub fn generate_trace(request: AlgorithmRequest) -> Result<Trace, AlgorithmError
         (AlgorithmId::InsertionSort, InputData::Sort(input)) => trace_insertion_sort(input),
         (AlgorithmId::BubbleSort, InputData::Sort(input)) => trace_bubble_sort(input),
         (AlgorithmId::Mergesort, InputData::Sort(input)) => trace_mergesort(input),
+        (AlgorithmId::HeapSort, InputData::Sort(input)) => trace_heap_sort(input),
         (AlgorithmId::Bfs, InputData::Graph(input)) => {
             let stop_at_target = match request.options {
                 Some(AlgorithmOptions::Bfs(options)) => options.stop_at_target,
@@ -397,6 +404,9 @@ pub fn generate_trace(request: AlgorithmRequest) -> Result<Trace, AlgorithmError
         )),
         (AlgorithmId::Mergesort, _) => Err(AlgorithmError::new(
             "Mergesort requires sort input with a values array.",
+        )),
+        (AlgorithmId::HeapSort, _) => Err(AlgorithmError::new(
+            "Heap Sort requires sort input with a values array.",
         )),
         (AlgorithmId::Bfs, _) => Err(AlgorithmError::new(
             "Breadth-first search requires graph input with nodes, edges, source, and target.",
@@ -456,6 +466,14 @@ pub fn example_request(algorithm: AlgorithmId) -> AlgorithmRequest {
                 values: vec![42, 12, 77, 18, 93, 31, 64, 5, 56, 29],
             }),
             options: Some(AlgorithmOptions::Mergesort(MergesortOptions::default())),
+        },
+        AlgorithmId::HeapSort => AlgorithmRequest {
+            algorithm,
+            input_mode: InputMode::Example,
+            input: InputData::Sort(SortInput {
+                values: vec![42, 12, 77, 18, 93, 31, 64, 5, 56, 29],
+            }),
+            options: Some(AlgorithmOptions::HeapSort(HeapSortOptions::default())),
         },
         AlgorithmId::Bfs => AlgorithmRequest {
             algorithm,
@@ -735,6 +753,141 @@ pub fn trace_mergesort(input: SortInput) -> Result<Trace, AlgorithmError> {
         events,
         metadata,
     })
+}
+
+pub fn trace_heap_sort(input: SortInput) -> Result<Trace, AlgorithmError> {
+    if input.values.len() > 128 {
+        return Err(AlgorithmError::new(
+            "Heap Sort input is capped at 128 values for interactive playback.",
+        ));
+    }
+
+    let initial_values = input.values.clone();
+    let mut values = input.values;
+    let mut events = Vec::new();
+    let len = values.len();
+
+    if len > 1 {
+        for root in (0..(len / 2)).rev() {
+            events.push(TraceEvent::SortPartition {
+                range: [0, len - 1],
+                boundary: root,
+                scanner: root,
+                message: format!("Sift index {root} while building the max heap."),
+            });
+            heap_sift_down(&mut values, root, len, &mut events);
+        }
+
+        for end in (1..len).rev() {
+            events.push(TraceEvent::SortCompare {
+                indices: [0, end],
+                message: format!(
+                    "Move heap maximum {} into sorted position {end}.",
+                    values[0]
+                ),
+            });
+            values.swap(0, end);
+            events.push(TraceEvent::SortSwap {
+                indices: [0, end],
+                values: values.clone(),
+                message: format!("Swap heap root with index {end}."),
+            });
+            events.push(TraceEvent::SortMarkSorted {
+                indices: (end..len).collect(),
+                message: format!("Positions {end} through {} are fixed.", len - 1),
+            });
+            heap_sift_down(&mut values, 0, end, &mut events);
+        }
+    }
+
+    if len == 1 {
+        events.push(TraceEvent::SortMarkSorted {
+            indices: vec![0],
+            message: "Single value is already sorted.".to_string(),
+        });
+    } else if len > 1 {
+        events.push(TraceEvent::SortMarkSorted {
+            indices: (0..len).collect(),
+            message: "All values are in sorted order.".to_string(),
+        });
+    }
+
+    let metadata = TraceMetadata {
+        algorithm_name: "Heap Sort".to_string(),
+        category: "Sorting".to_string(),
+        input_size: values.len(),
+        event_count: events.len(),
+        result_summary: format!("Sorted {} values.", values.len()),
+    };
+
+    Ok(Trace {
+        algorithm: AlgorithmId::HeapSort,
+        initial_state: VisualizationState::Array {
+            values: initial_values,
+        },
+        final_state: VisualizationState::Array { values },
+        events,
+        metadata,
+    })
+}
+
+fn heap_sift_down(
+    values: &mut [i32],
+    mut root: usize,
+    heap_size: usize,
+    events: &mut Vec<TraceEvent>,
+) {
+    loop {
+        let left = root * 2 + 1;
+        if left >= heap_size {
+            break;
+        }
+
+        let right = left + 1;
+        let mut largest = root;
+        events.push(TraceEvent::SortCompare {
+            indices: [root, left],
+            message: format!(
+                "Compare heap parent {} with left child {}.",
+                values[root], values[left]
+            ),
+        });
+        if values[left] > values[largest] {
+            largest = left;
+        }
+
+        if right < heap_size {
+            events.push(TraceEvent::SortCompare {
+                indices: [largest, right],
+                message: format!(
+                    "Compare heap candidate {} with right child {}.",
+                    values[largest], values[right]
+                ),
+            });
+            if values[right] > values[largest] {
+                largest = right;
+            }
+        }
+
+        events.push(TraceEvent::SortPartition {
+            range: [0, heap_size - 1],
+            boundary: root,
+            scanner: largest,
+            message: format!("Sift heap index {root} toward {largest}."),
+        });
+
+        if largest == root {
+            break;
+        }
+
+        values.swap(root, largest);
+        events.push(TraceEvent::SortSwap {
+            indices: [root, largest],
+            values: values.to_vec(),
+            message: format!("Swap heap parent {root} with child {largest}."),
+        });
+        root = largest;
+    }
 }
 
 fn mergesort_range(values: &mut [i32], start: usize, end: usize, events: &mut Vec<TraceEvent>) {
@@ -2118,6 +2271,34 @@ mod tests {
     }
 
     #[test]
+    fn heap_sort_trace_sorts_values() {
+        let trace = trace_heap_sort(SortInput {
+            values: vec![9, 3, 7, 1, 4],
+        })
+        .expect("trace");
+
+        assert_eq!(
+            trace.final_state,
+            VisualizationState::Array {
+                values: vec![1, 3, 4, 7, 9]
+            }
+        );
+        assert!(
+            trace
+                .events
+                .iter()
+                .any(|event| matches!(event, TraceEvent::SortPartition { .. }))
+        );
+        assert!(
+            trace
+                .events
+                .iter()
+                .any(|event| matches!(event, TraceEvent::SortSwap { .. }))
+        );
+        assert_valid_sort_trace(&trace);
+    }
+
+    #[test]
     fn bfs_trace_finds_shortest_unweighted_path() {
         let trace = trace_bfs(example_graph(), true).expect("trace");
 
@@ -2324,6 +2505,7 @@ mod tests {
             AlgorithmId::InsertionSort,
             AlgorithmId::BubbleSort,
             AlgorithmId::Mergesort,
+            AlgorithmId::HeapSort,
             AlgorithmId::Bfs,
             AlgorithmId::Dfs,
             AlgorithmId::Dijkstra,
@@ -2336,7 +2518,8 @@ mod tests {
                 AlgorithmId::Quicksort
                 | AlgorithmId::InsertionSort
                 | AlgorithmId::BubbleSort
-                | AlgorithmId::Mergesort => assert_valid_sort_trace(&trace),
+                | AlgorithmId::Mergesort
+                | AlgorithmId::HeapSort => assert_valid_sort_trace(&trace),
                 AlgorithmId::Bfs
                 | AlgorithmId::Dfs
                 | AlgorithmId::Dijkstra
@@ -2356,6 +2539,7 @@ mod tests {
                 | AlgorithmId::InsertionSort
                 | AlgorithmId::BubbleSort
                 | AlgorithmId::Mergesort
+                | AlgorithmId::HeapSort
         ));
         assert_eq!(trace.metadata.event_count, trace.events.len());
 

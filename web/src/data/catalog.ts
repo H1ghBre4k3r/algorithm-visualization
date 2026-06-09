@@ -79,6 +79,13 @@ export const algorithms: AlgorithmCatalogItem[] = [
     summary: "Split ranges recursively and merge sorted runs back together.",
   },
   {
+    id: "heapSort",
+    label: "Heap Sort",
+    category: "sorting",
+    status: "available",
+    summary: "Build a max heap, then extract fixed values from the root.",
+  },
+  {
     id: "bfs",
     label: "Breadth-First Search",
     category: "graph",

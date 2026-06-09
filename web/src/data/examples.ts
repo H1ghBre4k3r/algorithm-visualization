@@ -43,7 +43,8 @@ export function exampleRequest(algorithm: AvailableAlgorithmId): AlgorithmReques
     algorithm === "quicksort" ||
     algorithm === "insertionSort" ||
     algorithm === "bubbleSort" ||
-    algorithm === "mergesort"
+    algorithm === "mergesort" ||
+    algorithm === "heapSort"
   ) {
     return {
       algorithm,
@@ -56,7 +57,9 @@ export function exampleRequest(algorithm: AvailableAlgorithmId): AlgorithmReques
             ? { type: "insertionSort", value: {} }
             : algorithm === "bubbleSort"
               ? { type: "bubbleSort", value: {} }
-              : { type: "mergesort", value: {} },
+              : algorithm === "mergesort"
+                ? { type: "mergesort", value: {} }
+                : { type: "heapSort", value: {} },
     };
   }
 
@@ -112,7 +115,8 @@ export function customTemplate(algorithm: AvailableAlgorithmId): string {
     algorithm === "quicksort" ||
     algorithm === "insertionSort" ||
     algorithm === "bubbleSort" ||
-    algorithm === "mergesort"
+    algorithm === "mergesort" ||
+    algorithm === "heapSort"
       ? exampleSortInput
       : algorithm === "kmp"
         ? exampleSequenceInput

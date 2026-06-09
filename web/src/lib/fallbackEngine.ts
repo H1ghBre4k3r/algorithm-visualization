@@ -26,6 +26,10 @@ export function generateTraceFallback(request: AlgorithmRequest): Trace {
     return traceMergesort(request.input.value);
   }
 
+  if (request.algorithm === "heapSort" && request.input.type === "sort") {
+    return traceHeapSort(request.input.value);
+  }
+
   if (request.algorithm === "dijkstra" && request.input.type === "graph") {
     const stopAtTarget =
       request.options?.type === "dijkstra" ? request.options.value.stopAtTarget : true;
@@ -347,6 +351,122 @@ function mergeRanges(values: number[], start: number, middle: number, end: numbe
     indices: Array.from({ length: end - start + 1 }, (_, index) => start + index),
     message: `Merged range ${start}..${end}.`,
   });
+}
+
+function traceHeapSort(input: SortInput): Trace {
+  const initialValues = [...input.values];
+  const values = [...input.values];
+  const events: TraceEvent[] = [];
+
+  if (values.length > 128) {
+    throw new Error("Heap Sort input is capped at 128 values for interactive playback.");
+  }
+
+  if (values.length > 1) {
+    for (let root = Math.floor(values.length / 2) - 1; root >= 0; root -= 1) {
+      events.push({
+        type: "sortPartition",
+        range: [0, values.length - 1],
+        boundary: root,
+        scanner: root,
+        message: `Sift index ${root} while building the max heap.`,
+      });
+      heapSiftDown(values, root, values.length, events);
+    }
+
+    for (let end = values.length - 1; end >= 1; end -= 1) {
+      events.push({
+        type: "sortCompare",
+        indices: [0, end],
+        message: `Move heap maximum ${values[0]} into sorted position ${end}.`,
+      });
+      swap(values, 0, end);
+      events.push({
+        type: "sortSwap",
+        indices: [0, end],
+        values: [...values],
+        message: `Swap heap root with index ${end}.`,
+      });
+      events.push({
+        type: "sortMarkSorted",
+        indices: Array.from({ length: values.length - end }, (_, index) => end + index),
+        message: `Positions ${end} through ${values.length - 1} are fixed.`,
+      });
+      heapSiftDown(values, 0, end, events);
+    }
+
+    events.push({
+      type: "sortMarkSorted",
+      indices: values.map((_, index) => index),
+      message: "All values are in sorted order.",
+    });
+  } else if (values.length === 1) {
+    events.push({
+      type: "sortMarkSorted",
+      indices: [0],
+      message: "Single value is already sorted.",
+    });
+  }
+
+  return {
+    algorithm: "heapSort",
+    initialState: { type: "array", values: initialValues },
+    finalState: { type: "array", values },
+    events,
+    metadata: {
+      algorithmName: "Heap Sort",
+      category: "Sorting",
+      inputSize: values.length,
+      eventCount: events.length,
+      resultSummary: `Sorted ${values.length} values.`,
+    },
+  };
+}
+
+function heapSiftDown(values: number[], rootStart: number, heapSize: number, events: TraceEvent[]) {
+  let root = rootStart;
+
+  while (true) {
+    const left = root * 2 + 1;
+    if (left >= heapSize) break;
+
+    const right = left + 1;
+    let largest = root;
+    events.push({
+      type: "sortCompare",
+      indices: [root, left],
+      message: `Compare heap parent ${values[root]} with left child ${values[left]}.`,
+    });
+    if (values[left] > values[largest]) largest = left;
+
+    if (right < heapSize) {
+      events.push({
+        type: "sortCompare",
+        indices: [largest, right],
+        message: `Compare heap candidate ${values[largest]} with right child ${values[right]}.`,
+      });
+      if (values[right] > values[largest]) largest = right;
+    }
+
+    events.push({
+      type: "sortPartition",
+      range: [0, heapSize - 1],
+      boundary: root,
+      scanner: largest,
+      message: `Sift heap index ${root} toward ${largest}.`,
+    });
+
+    if (largest === root) break;
+
+    swap(values, root, largest);
+    events.push({
+      type: "sortSwap",
+      indices: [root, largest],
+      values: [...values],
+      message: `Swap heap parent ${root} with child ${largest}.`,
+    });
+    root = largest;
+  }
 }
 
 function quicksortRange(values: number[], low: number, high: number, events: TraceEvent[]) {

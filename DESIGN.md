@@ -34,6 +34,7 @@ Reference: https://impeccable.style
   - Insertion boundary: violet range wash.
   - Bubble pass fixed tail: green.
   - Merge range: violet range wash with amber comparisons.
+  - Heap range: violet range wash with green fixed tail.
   - Swap: red.
   - Fixed/sorted: green.
 - Graph:
