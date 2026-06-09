@@ -79,6 +79,13 @@ export const algorithms: AlgorithmCatalogItem[] = [
     summary: "Sweep adjacent swaps forward and backward through a shrinking range.",
   },
   {
+    id: "oddEvenSort",
+    label: "Odd-Even Sort",
+    category: "sorting",
+    status: "available",
+    summary: "Alternate odd and even adjacent phases until no swaps remain.",
+  },
+  {
     id: "selectionSort",
     label: "Selection Sort",
     category: "sorting",

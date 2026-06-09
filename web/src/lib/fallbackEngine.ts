@@ -26,6 +26,10 @@ export function generateTraceFallback(request: AlgorithmRequest): Trace {
     return traceCocktailShakerSort(request.input.value);
   }
 
+  if (request.algorithm === "oddEvenSort" && request.input.type === "sort") {
+    return traceOddEvenSort(request.input.value);
+  }
+
   if (request.algorithm === "selectionSort" && request.input.type === "sort") {
     return traceSelectionSort(request.input.value);
   }
@@ -390,6 +394,86 @@ function traceCocktailShakerSort(input: SortInput): Trace {
     events,
     metadata: {
       algorithmName: "Cocktail Shaker Sort",
+      category: "Sorting",
+      inputSize: values.length,
+      eventCount: events.length,
+      resultSummary: `Sorted ${values.length} values.`,
+    },
+  };
+}
+
+function traceOddEvenSort(input: SortInput): Trace {
+  const initialValues = [...input.values];
+  const values = [...input.values];
+  const events: TraceEvent[] = [];
+
+  if (values.length > 128) {
+    throw new Error("Odd-Even Sort input is capped at 128 values for interactive playback.");
+  }
+
+  if (values.length > 1) {
+    let sorted = false;
+    let pass = 0;
+
+    while (!sorted) {
+      sorted = true;
+
+      for (const phaseStart of [1, 0]) {
+        const phaseName = phaseStart === 1 ? "odd" : "even";
+        events.push({
+          type: "sortPartition",
+          range: [0, values.length - 1],
+          boundary: phaseStart,
+          scanner: phaseStart,
+          message: `Pass ${pass}: compare ${phaseName}-indexed pairs.`,
+        });
+
+        let index = phaseStart;
+        while (index + 1 < values.length) {
+          events.push({
+            type: "sortCompare",
+            indices: [index, index + 1],
+            message: `Compare ${values[index]} and ${values[index + 1]} in the ${phaseName} phase.`,
+          });
+
+          if (values[index] > values[index + 1]) {
+            swap(values, index, index + 1);
+            sorted = false;
+            events.push({
+              type: "sortSwap",
+              indices: [index, index + 1],
+              values: [...values],
+              message: `Swap adjacent pair ${index} and ${index + 1}.`,
+            });
+          }
+
+          index += 2;
+        }
+      }
+
+      pass += 1;
+    }
+
+    events.push({
+      type: "sortMarkSorted",
+      indices: values.map((_, index) => index),
+      message: "Odd and even phases made no swaps; values are sorted.",
+    });
+  } else if (values.length === 1) {
+    events.push({
+      type: "sortMarkSorted",
+      indices: [0],
+      message: "Single value is already sorted.",
+    });
+  }
+
+  return {
+    algorithm: "oddEvenSort",
+    initialState: { type: "array", values: initialValues },
+    finalState: { type: "array", values },
+    events,
+    metadata: {
+      algorithmName: "Odd-Even Sort",
       category: "Sorting",
       inputSize: values.length,
       eventCount: events.length,

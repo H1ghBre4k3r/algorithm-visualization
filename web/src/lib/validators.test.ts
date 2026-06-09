@@ -62,6 +62,13 @@ describe("parseSortInput", () => {
       value: { values: [11, 4, 8] },
     });
   });
+
+  it("routes odd-even sort custom input through the sort parser", () => {
+    expect(parseCustomInput("oddEvenSort", '{"values":[6,1,5]}')).toEqual({
+      type: "sort",
+      value: { values: [6, 1, 5] },
+    });
+  });
 });
 
 describe("parseGraphInput", () => {

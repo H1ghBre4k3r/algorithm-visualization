@@ -54,6 +54,7 @@ export default function App() {
     insertionSort: customTemplate("insertionSort"),
     bubbleSort: customTemplate("bubbleSort"),
     cocktailShakerSort: customTemplate("cocktailShakerSort"),
+    oddEvenSort: customTemplate("oddEvenSort"),
     selectionSort: customTemplate("selectionSort"),
     shellSort: customTemplate("shellSort"),
     countingSort: customTemplate("countingSort"),
@@ -484,6 +485,9 @@ function optionsForAlgorithm(algorithm: AvailableAlgorithmId): AlgorithmRequest[
   if (algorithm === "cocktailShakerSort") {
     return { type: "cocktailShakerSort", value: {} };
   }
+  if (algorithm === "oddEvenSort") {
+    return { type: "oddEvenSort", value: {} };
+  }
   if (algorithm === "selectionSort") {
     return { type: "selectionSort", value: {} };
   }
@@ -550,6 +554,7 @@ function isSortAlgorithm(algorithm: AvailableAlgorithmId) {
     algorithm === "insertionSort" ||
     algorithm === "bubbleSort" ||
     algorithm === "cocktailShakerSort" ||
+    algorithm === "oddEvenSort" ||
     algorithm === "selectionSort" ||
     algorithm === "shellSort" ||
     algorithm === "countingSort" ||

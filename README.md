@@ -8,6 +8,7 @@ Browser-first algorithm visualization MVP with a Rust trace core, WASM bindings,
 - Insertion Sort trace generation and animated bar visualization.
 - Bubble Sort trace generation and animated bar visualization.
 - Cocktail Shaker Sort trace generation and animated bar visualization.
+- Odd-Even Sort trace generation and animated bar visualization.
 - Selection Sort trace generation and animated bar visualization.
 - Shell Sort trace generation and animated bar visualization.
 - Counting Sort trace generation and animated bar visualization.

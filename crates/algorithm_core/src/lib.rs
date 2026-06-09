@@ -10,6 +10,7 @@ pub enum AlgorithmId {
     InsertionSort,
     BubbleSort,
     CocktailShakerSort,
+    OddEvenSort,
     SelectionSort,
     ShellSort,
     CountingSort,
@@ -63,6 +64,7 @@ pub enum AlgorithmOptions {
     InsertionSort(InsertionSortOptions),
     BubbleSort(BubbleSortOptions),
     CocktailShakerSort(CocktailShakerSortOptions),
+    OddEvenSort(OddEvenSortOptions),
     SelectionSort(SelectionSortOptions),
     ShellSort(ShellSortOptions),
     CountingSort(CountingSortOptions),
@@ -105,6 +107,10 @@ pub struct BubbleSortOptions {}
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct CocktailShakerSortOptions {}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct OddEvenSortOptions {}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
@@ -443,6 +449,7 @@ pub fn generate_trace(request: AlgorithmRequest) -> Result<Trace, AlgorithmError
         (AlgorithmId::CocktailShakerSort, InputData::Sort(input)) => {
             trace_cocktail_shaker_sort(input)
         }
+        (AlgorithmId::OddEvenSort, InputData::Sort(input)) => trace_odd_even_sort(input),
         (AlgorithmId::SelectionSort, InputData::Sort(input)) => trace_selection_sort(input),
         (AlgorithmId::ShellSort, InputData::Sort(input)) => trace_shell_sort(input),
         (AlgorithmId::CountingSort, InputData::Sort(input)) => trace_counting_sort(input),
@@ -496,6 +503,9 @@ pub fn generate_trace(request: AlgorithmRequest) -> Result<Trace, AlgorithmError
         )),
         (AlgorithmId::CocktailShakerSort, _) => Err(AlgorithmError::new(
             "Cocktail Shaker Sort requires sort input with a values array.",
+        )),
+        (AlgorithmId::OddEvenSort, _) => Err(AlgorithmError::new(
+            "Odd-Even Sort requires sort input with a values array.",
         )),
         (AlgorithmId::SelectionSort, _) => Err(AlgorithmError::new(
             "Selection Sort requires sort input with a values array.",
@@ -593,6 +603,14 @@ pub fn example_request(algorithm: AlgorithmId) -> AlgorithmRequest {
             options: Some(AlgorithmOptions::CocktailShakerSort(
                 CocktailShakerSortOptions::default(),
             )),
+        },
+        AlgorithmId::OddEvenSort => AlgorithmRequest {
+            algorithm,
+            input_mode: InputMode::Example,
+            input: InputData::Sort(SortInput {
+                values: vec![42, 12, 77, 18, 93, 31, 64, 5, 56, 29],
+            }),
+            options: Some(AlgorithmOptions::OddEvenSort(OddEvenSortOptions::default())),
         },
         AlgorithmId::SelectionSort => AlgorithmRequest {
             algorithm,
@@ -1045,6 +1063,92 @@ pub fn trace_cocktail_shaker_sort(input: SortInput) -> Result<Trace, AlgorithmEr
 
     Ok(Trace {
         algorithm: AlgorithmId::CocktailShakerSort,
+        initial_state: VisualizationState::Array {
+            values: initial_values,
+        },
+        final_state: VisualizationState::Array { values },
+        events,
+        metadata,
+    })
+}
+
+pub fn trace_odd_even_sort(input: SortInput) -> Result<Trace, AlgorithmError> {
+    if input.values.len() > 128 {
+        return Err(AlgorithmError::new(
+            "Odd-Even Sort input is capped at 128 values for interactive playback.",
+        ));
+    }
+
+    let initial_values = input.values.clone();
+    let mut values = input.values;
+    let mut events = Vec::new();
+    let len = values.len();
+
+    if len > 1 {
+        let mut sorted = false;
+        let mut pass = 0;
+
+        while !sorted {
+            sorted = true;
+
+            for phase_start in [1usize, 0usize] {
+                let phase_name = if phase_start == 1 { "odd" } else { "even" };
+                events.push(TraceEvent::SortPartition {
+                    range: [0, len - 1],
+                    boundary: phase_start,
+                    scanner: phase_start,
+                    message: format!("Pass {pass}: compare {phase_name}-indexed pairs."),
+                });
+
+                let mut index = phase_start;
+                while index + 1 < len {
+                    events.push(TraceEvent::SortCompare {
+                        indices: [index, index + 1],
+                        message: format!(
+                            "Compare {} and {} in the {phase_name} phase.",
+                            values[index],
+                            values[index + 1]
+                        ),
+                    });
+
+                    if values[index] > values[index + 1] {
+                        values.swap(index, index + 1);
+                        sorted = false;
+                        events.push(TraceEvent::SortSwap {
+                            indices: [index, index + 1],
+                            values: values.clone(),
+                            message: format!("Swap adjacent pair {index} and {}.", index + 1),
+                        });
+                    }
+
+                    index += 2;
+                }
+            }
+
+            pass += 1;
+        }
+
+        events.push(TraceEvent::SortMarkSorted {
+            indices: (0..len).collect(),
+            message: "Odd and even phases made no swaps; values are sorted.".to_string(),
+        });
+    } else if len == 1 {
+        events.push(TraceEvent::SortMarkSorted {
+            indices: vec![0],
+            message: "Single value is already sorted.".to_string(),
+        });
+    }
+
+    let metadata = TraceMetadata {
+        algorithm_name: "Odd-Even Sort".to_string(),
+        category: "Sorting".to_string(),
+        input_size: values.len(),
+        event_count: events.len(),
+        result_summary: format!("Sorted {} values.", values.len()),
+    };
+
+    Ok(Trace {
+        algorithm: AlgorithmId::OddEvenSort,
         initial_state: VisualizationState::Array {
             values: initial_values,
         },
@@ -3906,6 +4010,52 @@ mod tests {
     }
 
     #[test]
+    fn odd_even_sort_trace_sorts_values() {
+        let trace = trace_odd_even_sort(SortInput {
+            values: vec![9, 3, 7, 1, 4],
+        })
+        .expect("trace");
+
+        assert_eq!(
+            trace.final_state,
+            VisualizationState::Array {
+                values: vec![1, 3, 4, 7, 9]
+            }
+        );
+        assert!(
+            trace
+                .events
+                .iter()
+                .any(|event| matches!(event, TraceEvent::SortPartition { .. }))
+        );
+        assert!(
+            trace
+                .events
+                .iter()
+                .any(|event| matches!(event, TraceEvent::SortCompare { .. }))
+        );
+        assert!(
+            trace
+                .events
+                .iter()
+                .any(|event| matches!(event, TraceEvent::SortSwap { .. }))
+        );
+        assert_valid_sort_trace(&trace);
+    }
+
+    #[test]
+    fn odd_even_sort_handles_empty_input() {
+        let trace = trace_odd_even_sort(SortInput { values: vec![] }).expect("trace");
+
+        assert_eq!(
+            trace.final_state,
+            VisualizationState::Array { values: vec![] }
+        );
+        assert!(trace.events.is_empty());
+        assert_valid_sort_trace(&trace);
+    }
+
+    #[test]
     fn selection_sort_trace_sorts_values() {
         let trace = trace_selection_sort(SortInput {
             values: vec![9, 3, 7, 1, 4],
@@ -4556,6 +4706,7 @@ mod tests {
             AlgorithmId::InsertionSort,
             AlgorithmId::BubbleSort,
             AlgorithmId::CocktailShakerSort,
+            AlgorithmId::OddEvenSort,
             AlgorithmId::SelectionSort,
             AlgorithmId::ShellSort,
             AlgorithmId::CountingSort,
@@ -4581,6 +4732,7 @@ mod tests {
                 | AlgorithmId::InsertionSort
                 | AlgorithmId::BubbleSort
                 | AlgorithmId::CocktailShakerSort
+                | AlgorithmId::OddEvenSort
                 | AlgorithmId::SelectionSort
                 | AlgorithmId::ShellSort
                 | AlgorithmId::CountingSort
@@ -4612,6 +4764,7 @@ mod tests {
                 | AlgorithmId::InsertionSort
                 | AlgorithmId::BubbleSort
                 | AlgorithmId::CocktailShakerSort
+                | AlgorithmId::OddEvenSort
                 | AlgorithmId::SelectionSort
                 | AlgorithmId::ShellSort
                 | AlgorithmId::CountingSort
