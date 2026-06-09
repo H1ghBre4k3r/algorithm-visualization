@@ -107,6 +107,13 @@ export const algorithms: AlgorithmCatalogItem[] = [
     summary: "Relax weighted edges from a source until the shortest path is known.",
   },
   {
+    id: "bellmanFord",
+    label: "Bellman-Ford",
+    category: "graph",
+    status: "available",
+    summary: "Repeat edge relaxations to reveal shortest path distances.",
+  },
+  {
     id: "primMst",
     label: "Prim MST",
     category: "graph",

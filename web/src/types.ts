@@ -7,6 +7,7 @@ export type AvailableAlgorithmId =
   | "bfs"
   | "dfs"
   | "dijkstra"
+  | "bellmanFord"
   | "primMst"
   | "kruskal"
   | "kmp"
@@ -41,6 +42,7 @@ export type AlgorithmOptions =
   | { type: "bfs"; value: BfsOptions }
   | { type: "dfs"; value: DfsOptions }
   | { type: "dijkstra"; value: DijkstraOptions }
+  | { type: "bellmanFord"; value: BellmanFordOptions }
   | { type: "primMst"; value: PrimMstOptions }
   | { type: "kruskal"; value: KruskalOptions }
   | { type: "kmp"; value: KmpOptions }
@@ -67,6 +69,7 @@ export interface DijkstraOptions {
   stopAtTarget: boolean;
 }
 
+export type BellmanFordOptions = Record<string, never>;
 export type PrimMstOptions = Record<string, never>;
 export type KruskalOptions = Record<string, never>;
 export type KmpOptions = Record<string, never>;

@@ -23,6 +23,7 @@ pub fn example_request_for(algorithm: &str) -> Result<JsValue, JsValue> {
         "bfs" => AlgorithmId::Bfs,
         "dfs" => AlgorithmId::Dfs,
         "dijkstra" => AlgorithmId::Dijkstra,
+        "bellmanFord" => AlgorithmId::BellmanFord,
         "primMst" => AlgorithmId::PrimMst,
         "kruskal" => AlgorithmId::Kruskal,
         "kmp" => AlgorithmId::Kmp,

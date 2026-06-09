@@ -36,6 +36,10 @@ export function generateTraceFallback(request: AlgorithmRequest): Trace {
     return traceDijkstra(request.input.value, stopAtTarget);
   }
 
+  if (request.algorithm === "bellmanFord" && request.input.type === "graph") {
+    return traceBellmanFord(request.input.value);
+  }
+
   if (request.algorithm === "bfs" && request.input.type === "graph") {
     const stopAtTarget = request.options?.type === "bfs" ? request.options.value.stopAtTarget : true;
     return traceBfs(request.input.value, stopAtTarget);
@@ -974,6 +978,127 @@ function traceDijkstra(input: GraphInput, stopAtTarget: boolean): Trace {
     events,
     metadata: {
       algorithmName: "Dijkstra",
+      category: "Graph",
+      inputSize: input.nodes.length,
+      eventCount: events.length,
+      resultSummary:
+        totalDistance === null
+          ? "No reachable target path found."
+          : `Shortest path distance is ${totalDistance}.`,
+    },
+  };
+}
+
+function traceBellmanFord(input: GraphInput): Trace {
+  validateGraph(input);
+
+  const nodeOrder = input.nodes.map((node) => node.id);
+  const distances = new Map<string, number | null>(nodeOrder.map((node) => [node, null]));
+  const previous = new Map<string, string>();
+  const adjacency = buildAdjacency(input.edges);
+  const events: TraceEvent[] = [];
+  distances.set(input.source, 0);
+
+  for (let pass = 0; pass < Math.max(0, input.nodes.length - 1); pass += 1) {
+    let changed = false;
+    events.push({
+      type: "graphVisit",
+      node: input.source,
+      distance: pass,
+      message: `Start Bellman-Ford relaxation pass ${pass + 1}.`,
+    });
+
+    for (const from of nodeOrder) {
+      for (const edge of adjacency.get(from) ?? []) {
+        const fromDistance = distances.get(from) ?? null;
+        const previousDistance = distances.get(edge.to) ?? null;
+        const candidate = fromDistance === null ? null : fromDistance + edge.weight;
+        const improved = candidate !== null && (previousDistance === null || candidate < previousDistance);
+
+        if (improved) {
+          distances.set(edge.to, candidate);
+          previous.set(edge.to, from);
+          changed = true;
+        }
+
+        events.push({
+          type: "graphRelaxEdge",
+          edgeId: edge.edgeId,
+          from,
+          to: edge.to,
+          weight: edge.weight,
+          previousDistance,
+          newDistance: improved ? candidate : previousDistance,
+          improved,
+          message:
+            candidate === null
+              ? `Skip edge ${edge.edgeId} because ${from} is unreachable.`
+              : improved
+                ? `Update ${edge.to} to distance ${candidate}.`
+                : `Keep ${edge.to} at its current best distance.`,
+        });
+      }
+    }
+
+    if (!changed) {
+      events.push({
+        type: "graphSettle",
+        node: input.source,
+        distance: pass,
+        message: `No distances changed on pass ${pass + 1}; stop early.`,
+      });
+      break;
+    }
+  }
+
+  const [path, totalDistance] = input.target
+    ? reconstructPath(input.source, input.target, previous, distances)
+    : [[], null];
+
+  if (input.target) {
+    events.push({
+      type: "graphPath",
+      nodes: path,
+      totalDistance,
+      message:
+        totalDistance === null
+          ? "No path reaches the selected target."
+          : `Shortest path has total distance ${totalDistance}.`,
+    });
+  }
+
+  const initialDistances = nodeOrder.map<NodeDistance>((node) => ({
+    node,
+    distance: node === input.source ? 0 : null,
+  }));
+  const finalDistances = nodeOrder.map<NodeDistance>((node) => ({
+    node,
+    distance: distances.get(node) ?? null,
+  }));
+
+  return {
+    algorithm: "bellmanFord",
+    initialState: {
+      type: "graph",
+      nodes: input.nodes,
+      edges: input.edges,
+      source: input.source,
+      target: input.target ?? null,
+      distances: initialDistances,
+      path: [],
+    },
+    finalState: {
+      type: "graph",
+      nodes: input.nodes,
+      edges: input.edges,
+      source: input.source,
+      target: input.target ?? null,
+      distances: finalDistances,
+      path,
+    },
+    events,
+    metadata: {
+      algorithmName: "Bellman-Ford",
       category: "Graph",
       inputSize: input.nodes.length,
       eventCount: events.length,

@@ -58,6 +58,7 @@ export default function App() {
     bfs: customTemplate("bfs"),
     dfs: customTemplate("dfs"),
     dijkstra: customTemplate("dijkstra"),
+    bellmanFord: customTemplate("bellmanFord"),
     primMst: customTemplate("primMst"),
     kruskal: customTemplate("kruskal"),
     kmp: customTemplate("kmp"),
@@ -495,6 +496,9 @@ function optionsForAlgorithm(algorithm: AvailableAlgorithmId): AlgorithmRequest[
   if (algorithm === "kruskal") {
     return { type: "kruskal", value: {} };
   }
+  if (algorithm === "bellmanFord") {
+    return { type: "bellmanFord", value: {} };
+  }
   return { type: "dijkstra", value: { stopAtTarget: true } };
 }
 
@@ -519,6 +523,7 @@ function isGraphAlgorithm(algorithm: AvailableAlgorithmId) {
     algorithm === "bfs" ||
     algorithm === "dfs" ||
     algorithm === "dijkstra" ||
+    algorithm === "bellmanFord" ||
     algorithm === "primMst" ||
     algorithm === "kruskal"
   );

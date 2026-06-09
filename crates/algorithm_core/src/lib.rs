@@ -14,6 +14,7 @@ pub enum AlgorithmId {
     Bfs,
     Dfs,
     Dijkstra,
+    BellmanFord,
     PrimMst,
     Kruskal,
     Kmp,
@@ -57,6 +58,7 @@ pub enum AlgorithmOptions {
     Bfs(BfsOptions),
     Dfs(DfsOptions),
     Dijkstra(DijkstraOptions),
+    BellmanFord(BellmanFordOptions),
     PrimMst(PrimMstOptions),
     Kruskal(KruskalOptions),
     Kmp(KmpOptions),
@@ -110,6 +112,10 @@ pub struct DijkstraOptions {
     #[serde(default)]
     pub stop_at_target: bool,
 }
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct BellmanFordOptions {}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
@@ -396,6 +402,7 @@ pub fn generate_trace(request: AlgorithmRequest) -> Result<Trace, AlgorithmError
             };
             trace_dijkstra(input, stop_at_target)
         }
+        (AlgorithmId::BellmanFord, InputData::Graph(input)) => trace_bellman_ford(input),
         (AlgorithmId::PrimMst, InputData::Graph(input)) => trace_prim_mst(input),
         (AlgorithmId::Kruskal, InputData::Graph(input)) => trace_kruskal(input),
         (AlgorithmId::Kmp, InputData::Sequence(input)) => trace_kmp(input),
@@ -423,6 +430,9 @@ pub fn generate_trace(request: AlgorithmRequest) -> Result<Trace, AlgorithmError
         )),
         (AlgorithmId::Dijkstra, _) => Err(AlgorithmError::new(
             "Dijkstra requires graph input with nodes, edges, source, and target.",
+        )),
+        (AlgorithmId::BellmanFord, _) => Err(AlgorithmError::new(
+            "Bellman-Ford requires graph input with nodes, edges, source, and target.",
         )),
         (AlgorithmId::PrimMst, _) => Err(AlgorithmError::new(
             "Prim MST requires undirected graph input with nodes and weighted edges.",
@@ -508,6 +518,12 @@ pub fn example_request(algorithm: AlgorithmId) -> AlgorithmRequest {
             options: Some(AlgorithmOptions::Dijkstra(DijkstraOptions {
                 stop_at_target: true,
             })),
+        },
+        AlgorithmId::BellmanFord => AlgorithmRequest {
+            algorithm,
+            input_mode: InputMode::Example,
+            input: InputData::Graph(example_graph()),
+            options: Some(AlgorithmOptions::BellmanFord(BellmanFordOptions::default())),
         },
         AlgorithmId::PrimMst => AlgorithmRequest {
             algorithm,
@@ -1514,6 +1530,155 @@ pub fn trace_dijkstra(input: GraphInput, stop_at_target: bool) -> Result<Trace, 
 
     Ok(Trace {
         algorithm: AlgorithmId::Dijkstra,
+        initial_state: VisualizationState::Graph {
+            nodes: input.nodes.clone(),
+            edges: input.edges.clone(),
+            source: input.source.clone(),
+            target: input.target.clone(),
+            distances: initial_distances,
+            path: Vec::new(),
+        },
+        final_state: VisualizationState::Graph {
+            nodes: input.nodes,
+            edges: input.edges,
+            source: input.source,
+            target: input.target,
+            distances: final_distances,
+            path,
+        },
+        events,
+        metadata,
+    })
+}
+
+pub fn trace_bellman_ford(input: GraphInput) -> Result<Trace, AlgorithmError> {
+    validate_graph(&input)?;
+
+    let node_order = input
+        .nodes
+        .iter()
+        .map(|node| node.id.clone())
+        .collect::<Vec<_>>();
+    let initial_distances = node_order
+        .iter()
+        .map(|node| NodeDistance {
+            node: node.clone(),
+            distance: if *node == input.source { Some(0) } else { None },
+        })
+        .collect();
+
+    let mut distances: HashMap<String, Option<u32>> =
+        node_order.iter().map(|node| (node.clone(), None)).collect();
+    distances.insert(input.source.clone(), Some(0));
+    let mut previous: HashMap<String, String> = HashMap::new();
+    let adjacency = build_adjacency(&input.edges);
+    let mut events = Vec::new();
+
+    for pass in 0..input.nodes.len().saturating_sub(1) {
+        let mut changed = false;
+        events.push(TraceEvent::GraphVisit {
+            node: input.source.clone(),
+            distance: pass as u32,
+            message: format!("Start Bellman-Ford relaxation pass {}.", pass + 1),
+        });
+
+        for from in &node_order {
+            if let Some(edges) = adjacency.get(from) {
+                for edge in edges {
+                    let from_distance = distances.get(from).copied().flatten();
+                    let previous_distance = distances.get(&edge.to).copied().flatten();
+                    let candidate =
+                        from_distance.map(|distance| distance.saturating_add(edge.weight));
+                    let improved = match (candidate, previous_distance) {
+                        (Some(candidate), Some(existing)) => candidate < existing,
+                        (Some(_), None) => true,
+                        _ => false,
+                    };
+
+                    if improved {
+                        if let Some(candidate) = candidate {
+                            distances.insert(edge.to.clone(), Some(candidate));
+                            previous.insert(edge.to.clone(), from.clone());
+                            changed = true;
+                        }
+                    }
+
+                    events.push(TraceEvent::GraphRelaxEdge {
+                        edge_id: edge.edge_id.clone(),
+                        from: from.clone(),
+                        to: edge.to.clone(),
+                        weight: edge.weight,
+                        previous_distance,
+                        new_distance: if improved {
+                            candidate
+                        } else {
+                            previous_distance
+                        },
+                        improved,
+                        message: match (candidate, improved) {
+                            (Some(candidate), true) => {
+                                format!("Update {} to distance {candidate}.", edge.to)
+                            }
+                            (Some(_), false) => {
+                                format!("Keep {} at its current best distance.", edge.to)
+                            }
+                            (None, _) => {
+                                format!("Skip edge {} because {from} is unreachable.", edge.edge_id)
+                            }
+                        },
+                    });
+                }
+            }
+        }
+
+        if !changed {
+            events.push(TraceEvent::GraphSettle {
+                node: input.source.clone(),
+                distance: pass as u32,
+                message: format!("No distances changed on pass {}; stop early.", pass + 1),
+            });
+            break;
+        }
+    }
+
+    let (path, total_distance) = input
+        .target
+        .as_ref()
+        .map(|target| reconstruct_path(&input.source, target, &previous, &distances))
+        .unwrap_or_default();
+
+    if input.target.is_some() {
+        events.push(TraceEvent::GraphPath {
+            nodes: path.clone(),
+            total_distance,
+            message: match total_distance {
+                Some(distance) => format!("Shortest path has total distance {distance}."),
+                None => "No path reaches the selected target.".to_string(),
+            },
+        });
+    }
+
+    let final_distances = node_order
+        .iter()
+        .map(|node| NodeDistance {
+            node: node.clone(),
+            distance: distances.get(node).copied().flatten(),
+        })
+        .collect::<Vec<_>>();
+
+    let metadata = TraceMetadata {
+        algorithm_name: "Bellman-Ford".to_string(),
+        category: "Graph".to_string(),
+        input_size: input.nodes.len(),
+        event_count: events.len(),
+        result_summary: match total_distance {
+            Some(distance) => format!("Shortest path distance is {distance}."),
+            None => "No reachable target path found.".to_string(),
+        },
+    };
+
+    Ok(Trace {
+        algorithm: AlgorithmId::BellmanFord,
         initial_state: VisualizationState::Graph {
             nodes: input.nodes.clone(),
             edges: input.edges.clone(),
@@ -2567,6 +2732,36 @@ mod tests {
     }
 
     #[test]
+    fn bellman_ford_trace_finds_shortest_path() {
+        let trace = trace_bellman_ford(example_graph()).expect("trace");
+
+        let path = trace.events.iter().find_map(|event| match event {
+            TraceEvent::GraphPath {
+                nodes,
+                total_distance,
+                ..
+            } => Some((nodes.clone(), *total_distance)),
+            _ => None,
+        });
+
+        assert_eq!(
+            path,
+            Some((
+                vec![
+                    "A".to_string(),
+                    "C".to_string(),
+                    "B".to_string(),
+                    "D".to_string(),
+                    "E".to_string(),
+                    "F".to_string()
+                ],
+                Some(13)
+            ))
+        );
+        assert_valid_graph_trace(&trace);
+    }
+
+    #[test]
     fn dijkstra_rejects_edges_with_unknown_nodes() {
         let mut graph = example_graph();
         graph.edges.push(GraphEdge {
@@ -2729,6 +2924,7 @@ mod tests {
             AlgorithmId::Bfs,
             AlgorithmId::Dfs,
             AlgorithmId::Dijkstra,
+            AlgorithmId::BellmanFord,
             AlgorithmId::PrimMst,
             AlgorithmId::Kruskal,
             AlgorithmId::Kmp,
@@ -2744,6 +2940,7 @@ mod tests {
                 AlgorithmId::Bfs
                 | AlgorithmId::Dfs
                 | AlgorithmId::Dijkstra
+                | AlgorithmId::BellmanFord
                 | AlgorithmId::PrimMst
                 | AlgorithmId::Kruskal => assert_valid_graph_trace(&trace),
                 AlgorithmId::Kmp | AlgorithmId::Levenshtein => assert_valid_sequence_trace(&trace),
@@ -2822,6 +3019,7 @@ mod tests {
             AlgorithmId::Bfs
                 | AlgorithmId::Dfs
                 | AlgorithmId::Dijkstra
+                | AlgorithmId::BellmanFord
                 | AlgorithmId::PrimMst
                 | AlgorithmId::Kruskal
         ));

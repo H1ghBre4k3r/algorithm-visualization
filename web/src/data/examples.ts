@@ -109,7 +109,10 @@ export function exampleRequest(algorithm: AvailableAlgorithmId): AlgorithmReques
     algorithm,
     inputMode: "example",
     input: { type: "graph", value: structuredClone(exampleGraphInput) },
-    options: { type: "dijkstra", value: { stopAtTarget: true } },
+    options:
+      algorithm === "bellmanFord"
+        ? { type: "bellmanFord", value: {} }
+        : { type: "dijkstra", value: { stopAtTarget: true } },
   };
 }
 

@@ -43,6 +43,7 @@ Reference: https://impeccable.style
   - Active frontier: amber.
   - Discovered traversal depth: blue labels.
   - Depth-first stack operations: amber edge focus with blue depth labels.
+  - Relaxation pass updates: amber edge focus with blue distance labels.
   - Cycle rejection: red edge focus.
   - Final path or selected tree edges: green.
 - Sequence:
