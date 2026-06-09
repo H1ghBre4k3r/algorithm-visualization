@@ -1,4 +1,4 @@
-import type { AlgorithmId, AlgorithmRequest, GraphInput, SortInput } from "../types";
+import type { AlgorithmRequest, AvailableAlgorithmId, GraphInput, SortInput } from "../types";
 
 export const exampleSortInput: SortInput = {
   values: [42, 12, 77, 18, 93, 31, 64, 5, 56, 29],
@@ -28,7 +28,7 @@ export const exampleGraphInput: GraphInput = {
   target: "F",
 };
 
-export function exampleRequest(algorithm: AlgorithmId): AlgorithmRequest {
+export function exampleRequest(algorithm: AvailableAlgorithmId): AlgorithmRequest {
   if (algorithm === "quicksort") {
     return {
       algorithm,
@@ -46,7 +46,7 @@ export function exampleRequest(algorithm: AlgorithmId): AlgorithmRequest {
   };
 }
 
-export function customTemplate(algorithm: AlgorithmId): string {
+export function customTemplate(algorithm: AvailableAlgorithmId): string {
   const input = algorithm === "quicksort" ? exampleSortInput : exampleGraphInput;
   return JSON.stringify(input, null, 2);
 }

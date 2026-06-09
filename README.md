@@ -16,6 +16,8 @@ Browser-first algorithm visualization MVP with a Rust trace core, WASM bindings,
 - `crates/algorithm_core`: pure Rust algorithm tracing logic.
 - `crates/wasm`: `wasm-bindgen` wrapper for browser calls.
 - `web`: Vite + React + TypeScript app with Canvas 2D rendering.
+- `DESIGN.md`: product UI rules inspired by Impeccable's restrained design guidance.
+- `docs/PLANNING.md`: roadmap and acceptance gates for adding more algorithms.
 
 ## Run Locally
 

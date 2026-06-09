@@ -1,4 +1,4 @@
-import type { AlgorithmId, GraphEdge, GraphInput, GraphNode, InputData, SortInput } from "../types";
+import type { AvailableAlgorithmId, GraphEdge, GraphInput, GraphNode, InputData, SortInput } from "../types";
 
 export class InputValidationError extends Error {
   constructor(message: string) {
@@ -7,7 +7,7 @@ export class InputValidationError extends Error {
   }
 }
 
-export function parseCustomInput(algorithm: AlgorithmId, raw: string): InputData {
+export function parseCustomInput(algorithm: AvailableAlgorithmId, raw: string): InputData {
   return algorithm === "quicksort"
     ? { type: "sort", value: parseSortInput(raw) }
     : { type: "graph", value: parseGraphInput(raw) };

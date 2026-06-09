@@ -8,17 +8,27 @@ import {
   SkipForward,
 } from "lucide-react";
 
+import {
+  algorithms,
+  categories,
+  categoryForAlgorithm,
+  firstAvailableAlgorithm,
+  type CategoryId,
+} from "./data/catalog";
 import { customTemplate, exampleRequest } from "./data/examples";
 import { generateTrace } from "./lib/engine";
 import { randomGraphInput, randomSortInput } from "./lib/random";
 import { parseCustomInput } from "./lib/validators";
 import { drawTrace } from "./render/canvasRenderer";
-import type { AlgorithmId, AlgorithmRequest, GraphInput, InputMode, SortInput, Trace } from "./types";
-
-const algorithms: Array<{ id: AlgorithmId; label: string; category: string }> = [
-  { id: "quicksort", label: "Quicksort", category: "Sorting" },
-  { id: "dijkstra", label: "Dijkstra", category: "Graph" },
-];
+import type {
+  AlgorithmId,
+  AlgorithmRequest,
+  AvailableAlgorithmId,
+  GraphInput,
+  InputMode,
+  SortInput,
+  Trace,
+} from "./types";
 
 const inputModes: Array<{ id: InputMode; label: string }> = [
   { id: "example", label: "Example" },
@@ -27,13 +37,14 @@ const inputModes: Array<{ id: InputMode; label: string }> = [
 ];
 
 export default function App() {
-  const [algorithm, setAlgorithm] = useState<AlgorithmId>("quicksort");
+  const [category, setCategory] = useState<CategoryId>("sorting");
+  const [algorithm, setAlgorithm] = useState<AvailableAlgorithmId>("quicksort");
   const [inputMode, setInputMode] = useState<InputMode>("example");
   const [sortSize, setSortSize] = useState(18);
   const [graphSize, setGraphSize] = useState(7);
   const [randomSort, setRandomSort] = useState<SortInput>(() => randomSortInput(18));
   const [randomGraph, setRandomGraph] = useState<GraphInput>(() => randomGraphInput(7));
-  const [customJson, setCustomJson] = useState<Record<AlgorithmId, string>>({
+  const [customJson, setCustomJson] = useState<Record<AvailableAlgorithmId, string>>({
     quicksort: customTemplate("quicksort"),
     dijkstra: customTemplate("dijkstra"),
   });
@@ -99,6 +110,8 @@ export default function App() {
     return () => window.clearTimeout(timer);
   }, [isPlaying, speed, step, trace]);
 
+  const activeCategory = categories.find((item) => item.id === category) ?? categories[0];
+  const visibleAlgorithms = algorithms.filter((item) => item.category === category);
   const activeAlgorithm = algorithms.find((item) => item.id === algorithm) ?? algorithms[0];
   const currentEvent = step > 0 ? (trace?.events[step - 1] ?? null) : null;
   const canPlay = Boolean(trace && trace.events.length > 0 && step < trace.events.length);
@@ -115,6 +128,39 @@ export default function App() {
     setCustomJson((current) => ({ ...current, [algorithm]: customTemplate(algorithm) }));
   }
 
+  function selectCategory(nextCategory: CategoryId) {
+    setCategory(nextCategory);
+    const availableAlgorithm = firstAvailableAlgorithm(nextCategory);
+    if (availableAlgorithm) {
+      setAlgorithm(availableAlgorithm);
+      setInputMode("example");
+      setInputError(null);
+    } else {
+      setTrace(null);
+      setInputError("This category is planned. Choose an available algorithm to generate a trace.");
+    }
+    setStep(0);
+    setIsPlaying(false);
+  }
+
+  function selectAlgorithm(nextAlgorithm: AlgorithmId) {
+    const item = algorithms.find((candidate) => candidate.id === nextAlgorithm);
+    if (!item || item.status !== "available") {
+      setTrace(null);
+      setInputError(`${item?.label ?? "This algorithm"} is planned and does not generate traces yet.`);
+      setStep(0);
+      setIsPlaying(false);
+      return;
+    }
+
+    setCategory(categoryForAlgorithm(item.id));
+    setAlgorithm(item.id);
+    setInputMode("example");
+    setInputError(null);
+    setStep(0);
+    setIsPlaying(false);
+  }
+
   return (
     <div className="app-shell">
       <header className="topbar">
@@ -122,23 +168,19 @@ export default function App() {
           <span className="brand-mark">AV</span>
           <div>
             <h1>Algorithm Visualization</h1>
-            <p>{activeAlgorithm.category}</p>
+            <p>{activeCategory.label}</p>
           </div>
         </div>
-        <div className="algorithm-tabs" role="tablist" aria-label="Algorithm">
-          {algorithms.map((item) => (
+        <div className="category-tabs" role="tablist" aria-label="Category">
+          {categories.map((item) => (
             <button
               key={item.id}
-              className={item.id === algorithm ? "tab active" : "tab"}
+              className={item.id === category ? "tab active" : "tab"}
               type="button"
-              onClick={() => {
-                setAlgorithm(item.id);
-                setStep(0);
-                setIsPlaying(false);
-              }}
+              onClick={() => selectCategory(item.id)}
             >
               <span>{item.label}</span>
-              <small>{item.category}</small>
+              <small>{item.summary}</small>
             </button>
           ))}
         </div>
@@ -146,6 +188,26 @@ export default function App() {
 
       <main className="workspace">
         <aside className="control-panel">
+          <section className="control-section">
+            <h2>Algorithm</h2>
+            <div className="algorithm-list" role="list" aria-label="Algorithm">
+              {visibleAlgorithms.map((item) => (
+                <button
+                  key={item.id}
+                  className={item.id === algorithm && item.status === "available" ? "algorithm-option active" : "algorithm-option"}
+                  type="button"
+                  onClick={() => selectAlgorithm(item.id)}
+                >
+                  <span>
+                    <strong>{item.label}</strong>
+                    <small>{item.summary}</small>
+                  </span>
+                  <em>{item.status === "available" ? "Live" : "Planned"}</em>
+                </button>
+              ))}
+            </div>
+          </section>
+
           <section className="control-section">
             <h2>Input</h2>
             <div className="segmented" role="tablist" aria-label="Input mode">
@@ -286,7 +348,7 @@ export default function App() {
 }
 
 function buildRequest(
-  algorithm: AlgorithmId,
+  algorithm: AvailableAlgorithmId,
   inputMode: InputMode,
   randomSort: SortInput,
   randomGraph: GraphInput,

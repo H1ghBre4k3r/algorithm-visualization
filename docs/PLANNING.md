@@ -1,0 +1,54 @@
+# Algorithm Visualization Planning
+
+## Current Milestone
+
+The current milestone establishes the website architecture and proves the trace model with two live algorithms:
+
+- Sorting: Quicksort.
+- Graph: Dijkstra.
+- Input modes: example, random, custom JSON.
+- Rendering: Canvas 2D with real-time playback controls.
+- Engine: Rust trace core, WASM wrapper, TypeScript fallback for local development before `wasm-pack` output is generated.
+
+## Acceptance Gates For Every New Algorithm
+
+Before an algorithm is marked live in the catalog, it must have:
+
+- A typed input model and example input.
+- Random input generation when a meaningful random mode exists.
+- Custom JSON validation with actionable error messages.
+- Pure trace generation in Rust.
+- Unit tests proving final correctness.
+- Unit tests validating trace event references and step ordering.
+- A Canvas replay path or a documented renderer extension.
+- Browser smoke coverage for category, algorithm, input mode, and at least one step.
+
+## Roadmap
+
+1. Strengthen the platform.
+   - Generate and load the real WASM package in development.
+   - Add a browser smoke-test script that can run in CI.
+   - Split renderer modules by visualization family as the event catalog grows.
+
+2. Expand sorting.
+   - Add Mergesort, Heap Sort, Insertion Sort, and Bubble Sort.
+   - Reuse the array renderer where possible, adding events only when the animation needs them.
+
+3. Expand graph algorithms.
+   - Add breadth-first search, depth-first search, Kruskal, Prim, Bellman-Ford, and A*.
+   - Introduce graph input presets for sparse, dense, directed, and grid-style graphs.
+
+4. Add sequence processing.
+   - Add Knuth-Morris-Pratt, Boyer-Moore, Levenshtein Distance, and prefix tree construction.
+   - Add string/table/trie renderers rather than forcing these into the graph canvas model.
+
+5. Add distributed algorithms.
+   - Add handshake protocols, time synchronization, leader election, and Paxos.
+   - Add timeline/message-lane rendering with deterministic simulation steps.
+
+## Current Gaps
+
+- Only Quicksort and Dijkstra are live.
+- Planned algorithms are visible in the catalog but intentionally do not generate traces yet.
+- Browser verification is manual right now.
+- The frontend can run without generated WASM through a TypeScript fallback, but full Rust/WASM browser execution still requires `wasm-pack`.

@@ -727,6 +727,8 @@ fn edge(id: &str, from: &str, to: &str, weight: u32) -> GraphEdge {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashSet;
+
     use super::*;
 
     #[test]
@@ -748,7 +750,7 @@ mod tests {
                 .iter()
                 .any(|event| matches!(event, TraceEvent::SortPivot { .. }))
         );
-        assert_eq!(trace.metadata.event_count, trace.events.len());
+        assert_valid_sort_trace(&trace);
     }
 
     #[test]
@@ -760,6 +762,7 @@ mod tests {
             trace.final_state,
             VisualizationState::Array { values: Vec::new() }
         );
+        assert_valid_sort_trace(&trace);
     }
 
     #[test]
@@ -789,7 +792,7 @@ mod tests {
                 Some(13)
             ))
         );
-        assert_eq!(trace.metadata.event_count, trace.events.len());
+        assert_valid_graph_trace(&trace);
     }
 
     #[test]
@@ -805,5 +808,117 @@ mod tests {
 
         let error = trace_dijkstra(graph, true).expect_err("invalid graph");
         assert!(error.message().contains("unknown node"));
+    }
+
+    #[test]
+    fn example_requests_generate_valid_traces() {
+        for algorithm in [AlgorithmId::Quicksort, AlgorithmId::Dijkstra] {
+            let trace = generate_trace(example_request(algorithm)).expect("trace");
+            match algorithm {
+                AlgorithmId::Quicksort => assert_valid_sort_trace(&trace),
+                AlgorithmId::Dijkstra => assert_valid_graph_trace(&trace),
+            }
+        }
+    }
+
+    fn assert_valid_sort_trace(trace: &Trace) {
+        let VisualizationState::Array { values } = &trace.initial_state else {
+            panic!("sort trace must start with an array state");
+        };
+        assert_eq!(trace.algorithm, AlgorithmId::Quicksort);
+        assert_eq!(trace.metadata.event_count, trace.events.len());
+
+        let len = values.len();
+        for event in &trace.events {
+            match event {
+                TraceEvent::SortPivot { index, range, .. } => {
+                    assert!(*index < len);
+                    assert!(range[0] <= range[1]);
+                    assert!(range[1] < len);
+                }
+                TraceEvent::SortCompare { indices, .. } | TraceEvent::SortSwap { indices, .. } => {
+                    assert!(indices.iter().all(|index| *index < len));
+                }
+                TraceEvent::SortPartition {
+                    range,
+                    boundary,
+                    scanner,
+                    ..
+                } => {
+                    assert!(range[0] <= *boundary);
+                    assert!(*boundary <= range[1]);
+                    assert!(range[0] <= *scanner);
+                    assert!(*scanner <= range[1]);
+                    assert!(range[1] < len);
+                }
+                TraceEvent::SortMarkSorted { indices, .. } => {
+                    assert!(indices.iter().all(|index| *index < len));
+                }
+                _ => panic!("sort trace contains non-sort event: {event:?}"),
+            }
+        }
+
+        let VisualizationState::Array {
+            values: final_values,
+        } = &trace.final_state
+        else {
+            panic!("sort trace must finish with an array state");
+        };
+        assert!(final_values.windows(2).all(|pair| pair[0] <= pair[1]));
+    }
+
+    fn assert_valid_graph_trace(trace: &Trace) {
+        let VisualizationState::Graph {
+            nodes,
+            edges,
+            source,
+            target,
+            distances,
+            ..
+        } = &trace.initial_state
+        else {
+            panic!("graph trace must start with a graph state");
+        };
+
+        assert_eq!(trace.algorithm, AlgorithmId::Dijkstra);
+        assert_eq!(trace.metadata.event_count, trace.events.len());
+
+        let node_ids = nodes
+            .iter()
+            .map(|node| node.id.as_str())
+            .collect::<HashSet<_>>();
+        let edge_ids = edges
+            .iter()
+            .map(|edge| edge.id.as_str())
+            .collect::<HashSet<_>>();
+
+        assert!(node_ids.contains(source.as_str()));
+        if let Some(target) = target {
+            assert!(node_ids.contains(target.as_str()));
+        }
+        assert!(
+            distances
+                .iter()
+                .all(|item| node_ids.contains(item.node.as_str()))
+        );
+
+        for event in &trace.events {
+            match event {
+                TraceEvent::GraphVisit { node, .. } | TraceEvent::GraphSettle { node, .. } => {
+                    assert!(node_ids.contains(node.as_str()));
+                }
+                TraceEvent::GraphRelaxEdge {
+                    edge_id, from, to, ..
+                } => {
+                    assert!(edge_ids.contains(edge_id.as_str()));
+                    assert!(node_ids.contains(from.as_str()));
+                    assert!(node_ids.contains(to.as_str()));
+                }
+                TraceEvent::GraphPath { nodes, .. } => {
+                    assert!(nodes.iter().all(|node| node_ids.contains(node.as_str())));
+                }
+                _ => panic!("graph trace contains non-graph event: {event:?}"),
+            }
+        }
     }
 }

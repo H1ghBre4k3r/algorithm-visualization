@@ -1,4 +1,13 @@
-export type AlgorithmId = "quicksort" | "dijkstra";
+export type AvailableAlgorithmId = "quicksort" | "dijkstra";
+export type PlannedAlgorithmId =
+  | "kmp"
+  | "boyerMoore"
+  | "levenshtein"
+  | "prefixTrie"
+  | "handshake"
+  | "timeSync"
+  | "paxos";
+export type AlgorithmId = AvailableAlgorithmId | PlannedAlgorithmId;
 export type InputMode = "example" | "random" | "custom";
 
 export interface AlgorithmRequest {
