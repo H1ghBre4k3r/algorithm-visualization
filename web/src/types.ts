@@ -1,4 +1,4 @@
-export type AvailableAlgorithmId = "quicksort" | "dijkstra" | "kmp";
+export type AvailableAlgorithmId = "quicksort" | "dijkstra" | "primMst" | "kmp";
 export type PlannedAlgorithmId =
   | "boyerMoore"
   | "levenshtein"
@@ -24,6 +24,7 @@ export type InputData =
 export type AlgorithmOptions =
   | { type: "quicksort"; value: QuicksortOptions }
   | { type: "dijkstra"; value: DijkstraOptions }
+  | { type: "primMst"; value: PrimMstOptions }
   | { type: "kmp"; value: KmpOptions };
 
 export interface QuicksortOptions {
@@ -34,6 +35,7 @@ export interface DijkstraOptions {
   stopAtTarget: boolean;
 }
 
+export type PrimMstOptions = Record<string, never>;
 export type KmpOptions = Record<string, never>;
 
 export interface SortInput {
@@ -165,6 +167,37 @@ export type TraceEvent =
       type: "graphPath";
       nodes: string[];
       totalDistance: number | null;
+      message: string;
+    }
+  | {
+      type: "graphConsiderEdge";
+      edgeId: string;
+      from: string;
+      to: string;
+      weight: number;
+      message: string;
+    }
+  | {
+      type: "graphSelectEdge";
+      edgeId: string;
+      from: string;
+      to: string;
+      weight: number;
+      totalWeight: number;
+      message: string;
+    }
+  | {
+      type: "graphRejectEdge";
+      edgeId: string;
+      from: string;
+      to: string;
+      weight: number;
+      message: string;
+    }
+  | {
+      type: "graphSpanningTree";
+      edgeIds: string[];
+      totalWeight: number;
       message: string;
     }
   | {

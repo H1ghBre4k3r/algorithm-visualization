@@ -37,7 +37,7 @@ Reference: https://impeccable.style
   - Source: blue.
   - Target: orange.
   - Active frontier: amber.
-  - Final path: green.
+  - Final path or selected tree edges: green.
 - Sequence:
   - Active comparison: amber.
   - Mismatch/fallback: red.

@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 pub enum AlgorithmId {
     Quicksort,
     Dijkstra,
+    PrimMst,
     Kmp,
 }
 
@@ -42,6 +43,7 @@ pub enum InputData {
 pub enum AlgorithmOptions {
     Quicksort(QuicksortOptions),
     Dijkstra(DijkstraOptions),
+    PrimMst(PrimMstOptions),
     Kmp(KmpOptions),
 }
 
@@ -62,6 +64,10 @@ pub struct DijkstraOptions {
     #[serde(default)]
     pub stop_at_target: bool,
 }
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct PrimMstOptions {}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
@@ -216,6 +222,37 @@ pub enum TraceEvent {
         total_distance: Option<u32>,
         message: String,
     },
+    GraphConsiderEdge {
+        #[serde(rename = "edgeId")]
+        edge_id: String,
+        from: String,
+        to: String,
+        weight: u32,
+        message: String,
+    },
+    GraphSelectEdge {
+        #[serde(rename = "edgeId")]
+        edge_id: String,
+        from: String,
+        to: String,
+        weight: u32,
+        total_weight: u32,
+        message: String,
+    },
+    GraphRejectEdge {
+        #[serde(rename = "edgeId")]
+        edge_id: String,
+        from: String,
+        to: String,
+        weight: u32,
+        message: String,
+    },
+    GraphSpanningTree {
+        #[serde(rename = "edgeIds")]
+        edge_ids: Vec<String>,
+        total_weight: u32,
+        message: String,
+    },
     SequenceBuildPrefix {
         pattern_index: usize,
         prefix_index: usize,
@@ -275,12 +312,16 @@ pub fn generate_trace(request: AlgorithmRequest) -> Result<Trace, AlgorithmError
             };
             trace_dijkstra(input, stop_at_target)
         }
+        (AlgorithmId::PrimMst, InputData::Graph(input)) => trace_prim_mst(input),
         (AlgorithmId::Kmp, InputData::Sequence(input)) => trace_kmp(input),
         (AlgorithmId::Quicksort, _) => Err(AlgorithmError::new(
             "Quicksort requires sort input with a values array.",
         )),
         (AlgorithmId::Dijkstra, _) => Err(AlgorithmError::new(
             "Dijkstra requires graph input with nodes, edges, source, and target.",
+        )),
+        (AlgorithmId::PrimMst, _) => Err(AlgorithmError::new(
+            "Prim MST requires undirected graph input with nodes and weighted edges.",
         )),
         (AlgorithmId::Kmp, _) => Err(AlgorithmError::new(
             "Knuth-Morris-Pratt requires sequence input with text and pattern.",
@@ -307,6 +348,12 @@ pub fn example_request(algorithm: AlgorithmId) -> AlgorithmRequest {
             options: Some(AlgorithmOptions::Dijkstra(DijkstraOptions {
                 stop_at_target: true,
             })),
+        },
+        AlgorithmId::PrimMst => AlgorithmRequest {
+            algorithm,
+            input_mode: InputMode::Example,
+            input: InputData::Graph(example_graph()),
+            options: Some(AlgorithmOptions::PrimMst(PrimMstOptions::default())),
         },
         AlgorithmId::Kmp => AlgorithmRequest {
             algorithm,
@@ -592,6 +639,145 @@ pub fn trace_dijkstra(input: GraphInput, stop_at_target: bool) -> Result<Trace, 
     })
 }
 
+pub fn trace_prim_mst(input: GraphInput) -> Result<Trace, AlgorithmError> {
+    validate_graph(&input)?;
+    validate_mst_graph(&input)?;
+
+    let node_order = input
+        .nodes
+        .iter()
+        .map(|node| node.id.clone())
+        .collect::<Vec<_>>();
+    let mut visited = HashSet::new();
+    let mut selected_edges = Vec::new();
+    let mut total_weight = 0;
+    let mut events = Vec::new();
+    let start = input.source.clone();
+
+    visited.insert(start.clone());
+    events.push(TraceEvent::GraphVisit {
+        node: start.clone(),
+        distance: 0,
+        message: format!("Start the spanning tree at node {start}."),
+    });
+
+    while visited.len() < input.nodes.len() {
+        let mut best: Option<(usize, &GraphEdge, String, String)> = None;
+
+        for (index, edge) in input.edges.iter().enumerate() {
+            let from_visited = visited.contains(&edge.from);
+            let to_visited = visited.contains(&edge.to);
+
+            if from_visited == to_visited {
+                if from_visited {
+                    events.push(TraceEvent::GraphRejectEdge {
+                        edge_id: edge.id.clone(),
+                        from: edge.from.clone(),
+                        to: edge.to.clone(),
+                        weight: edge.weight,
+                        message: format!(
+                            "Reject edge {} because both endpoints are already in the tree.",
+                            edge.id
+                        ),
+                    });
+                }
+                continue;
+            }
+
+            let (from, to) = if from_visited {
+                (edge.from.clone(), edge.to.clone())
+            } else {
+                (edge.to.clone(), edge.from.clone())
+            };
+            events.push(TraceEvent::GraphConsiderEdge {
+                edge_id: edge.id.clone(),
+                from: from.clone(),
+                to: to.clone(),
+                weight: edge.weight,
+                message: format!(
+                    "Consider edge {} from {from} to {to} with weight {}.",
+                    edge.id, edge.weight
+                ),
+            });
+
+            let should_replace = best.as_ref().map_or(true, |(best_index, best_edge, _, _)| {
+                edge.weight < best_edge.weight
+                    || (edge.weight == best_edge.weight && index < *best_index)
+            });
+            if should_replace {
+                best = Some((index, edge, from, to));
+            }
+        }
+
+        let Some((_, edge, from, to)) = best else {
+            return Err(AlgorithmError::new(
+                "Prim MST requires a connected graph to span every node.",
+            ));
+        };
+
+        visited.insert(to.clone());
+        selected_edges.push(edge.id.clone());
+        total_weight += edge.weight;
+        events.push(TraceEvent::GraphSelectEdge {
+            edge_id: edge.id.clone(),
+            from: from.clone(),
+            to: to.clone(),
+            weight: edge.weight,
+            total_weight,
+            message: format!("Select edge {} and add node {to} to the tree.", edge.id),
+        });
+        events.push(TraceEvent::GraphSettle {
+            node: to.clone(),
+            distance: total_weight,
+            message: format!("Node {to} is now connected to the spanning tree."),
+        });
+    }
+
+    events.push(TraceEvent::GraphSpanningTree {
+        edge_ids: selected_edges.clone(),
+        total_weight,
+        message: format!("Minimum spanning tree complete with total weight {total_weight}."),
+    });
+
+    let distances = node_order
+        .iter()
+        .map(|node| NodeDistance {
+            node: node.clone(),
+            distance: None,
+        })
+        .collect::<Vec<_>>();
+
+    let metadata = TraceMetadata {
+        algorithm_name: "Prim MST".to_string(),
+        category: "Graph".to_string(),
+        input_size: input.nodes.len(),
+        event_count: events.len(),
+        result_summary: format!("MST total weight is {total_weight}."),
+    };
+
+    Ok(Trace {
+        algorithm: AlgorithmId::PrimMst,
+        initial_state: VisualizationState::Graph {
+            nodes: input.nodes.clone(),
+            edges: input.edges.clone(),
+            source: input.source.clone(),
+            target: None,
+            distances: distances.clone(),
+            path: Vec::new(),
+        },
+        final_state: VisualizationState::Graph {
+            nodes: input.nodes,
+            edges: input.edges,
+            source: input.source,
+            target: None,
+            distances,
+            path: selected_edges,
+        },
+        events,
+        metadata,
+    })
+}
+
 pub fn trace_kmp(input: SequenceInput) -> Result<Trace, AlgorithmError> {
     validate_sequence(&input)?;
 
@@ -852,6 +1038,21 @@ fn validate_graph(input: &GraphInput) -> Result<(), AlgorithmError> {
     Ok(())
 }
 
+fn validate_mst_graph(input: &GraphInput) -> Result<(), AlgorithmError> {
+    if input.edges.is_empty() {
+        return Err(AlgorithmError::new(
+            "Prim MST requires at least one weighted edge.",
+        ));
+    }
+    if let Some(edge) = input.edges.iter().find(|edge| edge.directed) {
+        return Err(AlgorithmError::new(format!(
+            "Prim MST requires undirected edges; edge '{}' is directed.",
+            edge.id
+        )));
+    }
+    Ok(())
+}
+
 fn reconstruct_path(
     source: &str,
     target: &str,
@@ -1032,6 +1233,44 @@ mod tests {
     }
 
     #[test]
+    fn prim_mst_trace_finds_minimum_spanning_tree() {
+        let trace = trace_prim_mst(example_graph()).expect("trace");
+
+        let tree = trace.events.iter().find_map(|event| match event {
+            TraceEvent::GraphSpanningTree {
+                edge_ids,
+                total_weight,
+                ..
+            } => Some((edge_ids.clone(), *total_weight)),
+            _ => None,
+        });
+
+        assert_eq!(
+            tree,
+            Some((
+                vec![
+                    "AC".to_string(),
+                    "BC".to_string(),
+                    "BD".to_string(),
+                    "DE".to_string(),
+                    "EF".to_string()
+                ],
+                13
+            ))
+        );
+        assert_valid_graph_trace(&trace);
+    }
+
+    #[test]
+    fn prim_mst_rejects_directed_edges() {
+        let mut graph = example_graph();
+        graph.edges[0].directed = true;
+
+        let error = trace_prim_mst(graph).expect_err("invalid graph");
+        assert!(error.message().contains("undirected"));
+    }
+
+    #[test]
     fn kmp_trace_finds_pattern_matches() {
         let trace = trace_kmp(SequenceInput {
             text: "ababcabcabababd".to_string(),
@@ -1067,12 +1306,13 @@ mod tests {
         for algorithm in [
             AlgorithmId::Quicksort,
             AlgorithmId::Dijkstra,
+            AlgorithmId::PrimMst,
             AlgorithmId::Kmp,
         ] {
             let trace = generate_trace(example_request(algorithm)).expect("trace");
             match algorithm {
                 AlgorithmId::Quicksort => assert_valid_sort_trace(&trace),
-                AlgorithmId::Dijkstra => assert_valid_graph_trace(&trace),
+                AlgorithmId::Dijkstra | AlgorithmId::PrimMst => assert_valid_graph_trace(&trace),
                 AlgorithmId::Kmp => assert_valid_sequence_trace(&trace),
             }
         }
@@ -1137,7 +1377,10 @@ mod tests {
             panic!("graph trace must start with a graph state");
         };
 
-        assert_eq!(trace.algorithm, AlgorithmId::Dijkstra);
+        assert!(matches!(
+            trace.algorithm,
+            AlgorithmId::Dijkstra | AlgorithmId::PrimMst
+        ));
         assert_eq!(trace.metadata.event_count, trace.events.len());
 
         let node_ids = nodes
@@ -1174,9 +1417,31 @@ mod tests {
                 TraceEvent::GraphPath { nodes, .. } => {
                     assert!(nodes.iter().all(|node| node_ids.contains(node.as_str())));
                 }
+                TraceEvent::GraphConsiderEdge {
+                    edge_id, from, to, ..
+                }
+                | TraceEvent::GraphSelectEdge {
+                    edge_id, from, to, ..
+                }
+                | TraceEvent::GraphRejectEdge {
+                    edge_id, from, to, ..
+                } => {
+                    assert!(edge_ids.contains(edge_id.as_str()));
+                    assert!(node_ids.contains(from.as_str()));
+                    assert!(node_ids.contains(to.as_str()));
+                }
+                TraceEvent::GraphSpanningTree { edge_ids, .. } => {
+                    let unique_edges = edge_ids.iter().collect::<HashSet<_>>();
+                    assert_eq!(unique_edges.len(), edge_ids.len());
+                    assert!(edge_ids.iter().all(|edge| edge_ids_in_graph(edge, edges)));
+                }
                 _ => panic!("graph trace contains non-graph event: {event:?}"),
             }
         }
+    }
+
+    fn edge_ids_in_graph(edge_id: &str, edges: &[GraphEdge]) -> bool {
+        edges.iter().any(|edge| edge.id == edge_id)
     }
 
     fn assert_valid_sequence_trace(trace: &Trace) {

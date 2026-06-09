@@ -5,7 +5,7 @@
 The current milestone establishes the website architecture and proves the trace model across three algorithm families:
 
 - Sorting: Quicksort.
-- Graph: Dijkstra.
+- Graph: Dijkstra, Prim MST.
 - Sequence: Knuth-Morris-Pratt.
 - Input modes: example, random, custom JSON.
 - Rendering: Canvas 2D with real-time playback controls.
@@ -36,7 +36,7 @@ Before an algorithm is marked live in the catalog, it must have:
    - Reuse the array renderer where possible, adding events only when the animation needs them.
 
 3. Expand graph algorithms.
-   - Add breadth-first search, depth-first search, Kruskal, Prim, Bellman-Ford, and A*.
+   - Add breadth-first search, depth-first search, Kruskal, Bellman-Ford, and A*.
    - Introduce graph input presets for sparse, dense, directed, and grid-style graphs.
 
 4. Add sequence processing.
@@ -49,7 +49,7 @@ Before an algorithm is marked live in the catalog, it must have:
 
 ## Current Gaps
 
-- Only Quicksort, Dijkstra, and Knuth-Morris-Pratt are live.
+- Only Quicksort, Dijkstra, Prim MST, and Knuth-Morris-Pratt are live.
 - Planned algorithms are visible in the catalog but intentionally do not generate traces yet.
 - Browser verification is manual right now.
 - The frontend can run without generated WASM through a TypeScript fallback, but full Rust/WASM browser execution still requires `wasm-pack`.

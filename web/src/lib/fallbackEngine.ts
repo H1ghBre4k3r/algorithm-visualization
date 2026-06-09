@@ -20,6 +20,10 @@ export function generateTraceFallback(request: AlgorithmRequest): Trace {
     return traceDijkstra(request.input.value, stopAtTarget);
   }
 
+  if (request.algorithm === "primMst" && request.input.type === "graph") {
+    return tracePrimMst(request.input.value);
+  }
+
   if (request.algorithm === "kmp" && request.input.type === "sequence") {
     return traceKmp(request.input.value);
   }
@@ -276,6 +280,124 @@ function traceDijkstra(input: GraphInput, stopAtTarget: boolean): Trace {
   };
 }
 
+function tracePrimMst(input: GraphInput): Trace {
+  validateGraph(input);
+  validateMstGraph(input);
+
+  const nodeOrder = input.nodes.map((node) => node.id);
+  const visited = new Set<string>([input.source]);
+  const selectedEdges: string[] = [];
+  const events: TraceEvent[] = [
+    {
+      type: "graphVisit",
+      node: input.source,
+      distance: 0,
+      message: `Start the spanning tree at node ${input.source}.`,
+    },
+  ];
+  let totalWeight = 0;
+
+  while (visited.size < input.nodes.length) {
+    let best: { edge: GraphEdge; index: number; from: string; to: string } | null = null;
+
+    for (const [index, edge] of input.edges.entries()) {
+      const fromVisited = visited.has(edge.from);
+      const toVisited = visited.has(edge.to);
+
+      if (fromVisited === toVisited) {
+        if (fromVisited) {
+          events.push({
+            type: "graphRejectEdge",
+            edgeId: edge.id,
+            from: edge.from,
+            to: edge.to,
+            weight: edge.weight,
+            message: `Reject edge ${edge.id} because both endpoints are already in the tree.`,
+          });
+        }
+        continue;
+      }
+
+      const from = fromVisited ? edge.from : edge.to;
+      const to = fromVisited ? edge.to : edge.from;
+      events.push({
+        type: "graphConsiderEdge",
+        edgeId: edge.id,
+        from,
+        to,
+        weight: edge.weight,
+        message: `Consider edge ${edge.id} from ${from} to ${to} with weight ${edge.weight}.`,
+      });
+
+      if (!best || edge.weight < best.edge.weight || (edge.weight === best.edge.weight && index < best.index)) {
+        best = { edge, index, from, to };
+      }
+    }
+
+    if (!best) {
+      throw new Error("Prim MST requires a connected graph to span every node.");
+    }
+
+    visited.add(best.to);
+    selectedEdges.push(best.edge.id);
+    totalWeight += best.edge.weight;
+    events.push({
+      type: "graphSelectEdge",
+      edgeId: best.edge.id,
+      from: best.from,
+      to: best.to,
+      weight: best.edge.weight,
+      totalWeight,
+      message: `Select edge ${best.edge.id} and add node ${best.to} to the tree.`,
+    });
+    events.push({
+      type: "graphSettle",
+      node: best.to,
+      distance: totalWeight,
+      message: `Node ${best.to} is now connected to the spanning tree.`,
+    });
+  }
+
+  events.push({
+    type: "graphSpanningTree",
+    edgeIds: selectedEdges,
+    totalWeight,
+    message: `Minimum spanning tree complete with total weight ${totalWeight}.`,
+  });
+
+  const distances = nodeOrder.map<NodeDistance>((node) => ({ node, distance: null }));
+
+  return {
+    algorithm: "primMst",
+    initialState: {
+      type: "graph",
+      nodes: input.nodes,
+      edges: input.edges,
+      source: input.source,
+      target: null,
+      distances,
+      path: [],
+    },
+    finalState: {
+      type: "graph",
+      nodes: input.nodes,
+      edges: input.edges,
+      source: input.source,
+      target: null,
+      distances,
+      path: selectedEdges,
+    },
+    events,
+    metadata: {
+      algorithmName: "Prim MST",
+      category: "Graph",
+      inputSize: input.nodes.length,
+      eventCount: events.length,
+      resultSummary: `MST total weight is ${totalWeight}.`,
+    },
+  };
+}
+
 function traceKmp(input: SequenceInput): Trace {
   validateSequence(input);
 
@@ -505,6 +627,16 @@ function validateGraph(input: GraphInput) {
     if (!nodes.has(edge.from) || !nodes.has(edge.to)) {
       throw new Error(`Edge '${edge.id}' references an unknown node.`);
     }
+  }
+}
+
+function validateMstGraph(input: GraphInput) {
+  if (input.edges.length === 0) {
+    throw new Error("Prim MST requires at least one weighted edge.");
+  }
+  const directedEdge = input.edges.find((edge) => edge.directed);
+  if (directedEdge) {
+    throw new Error(`Prim MST requires undirected edges; edge '${directedEdge.id}' is directed.`);
   }
 }
 

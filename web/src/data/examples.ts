@@ -52,6 +52,15 @@ export function exampleRequest(algorithm: AvailableAlgorithmId): AlgorithmReques
     };
   }
 
+  if (algorithm === "primMst") {
+    return {
+      algorithm,
+      inputMode: "example",
+      input: { type: "graph", value: structuredClone(exampleGraphInput) },
+      options: { type: "primMst", value: {} },
+    };
+  }
+
   return {
     algorithm,
     inputMode: "example",

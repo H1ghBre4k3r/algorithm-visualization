@@ -50,6 +50,7 @@ export default function App() {
   const [customJson, setCustomJson] = useState<Record<AvailableAlgorithmId, string>>({
     quicksort: customTemplate("quicksort"),
     dijkstra: customTemplate("dijkstra"),
+    primMst: customTemplate("primMst"),
     kmp: customTemplate("kmp"),
   });
   const [trace, setTrace] = useState<Trace | null>(null);
@@ -261,7 +262,7 @@ export default function App() {
                   }}
                 />
               )}
-              {algorithm === "dijkstra" && (
+              {isGraphAlgorithm(algorithm) && (
                 <RangeControl
                   label="Count"
                   min={4}
@@ -410,6 +411,14 @@ function buildRequest(
       options: optionsForAlgorithm(algorithm),
     };
   }
+  if (algorithm === "primMst") {
+    return {
+      algorithm,
+      inputMode,
+      input: { type: "graph", value: randomGraph },
+      options: optionsForAlgorithm(algorithm),
+    };
+  }
   return {
     algorithm,
     inputMode,
@@ -425,6 +434,9 @@ function optionsForAlgorithm(algorithm: AvailableAlgorithmId): AlgorithmRequest[
   if (algorithm === "kmp") {
     return { type: "kmp", value: {} };
   }
+  if (algorithm === "primMst") {
+    return { type: "primMst", value: {} };
+  }
   return { type: "dijkstra", value: { stopAtTarget: true } };
 }
 
@@ -432,6 +444,10 @@ function randomControlLabel(algorithm: AvailableAlgorithmId) {
   if (algorithm === "quicksort") return "Values";
   if (algorithm === "kmp") return "Text";
   return "Nodes";
+}
+
+function isGraphAlgorithm(algorithm: AvailableAlgorithmId) {
+  return algorithm === "dijkstra" || algorithm === "primMst";
 }
 
 function VisualizationCanvas({ trace, step }: { trace: Trace; step: number }) {

@@ -41,7 +41,7 @@ export function drawTrace(canvas: HTMLCanvasElement, trace: Trace, step: number)
     drawSortTrace(context, width, height, trace, step);
   }
 
-  if (trace.algorithm === "dijkstra" && trace.initialState.type === "graph") {
+  if ((trace.algorithm === "dijkstra" || trace.algorithm === "primMst") && trace.initialState.type === "graph") {
     drawGraphTrace(context, width, height, trace, step);
   }
 
@@ -228,6 +228,7 @@ interface GraphFrame {
   activeNode: string | null;
   activeEdgeId: string | null;
   path: string[];
+  selectedEdges: Set<string>;
 }
 
 function deriveGraphFrame(trace: Trace, step: number): GraphFrame {
@@ -236,6 +237,7 @@ function deriveGraphFrame(trace: Trace, step: number): GraphFrame {
   let activeNode: string | null = null;
   let activeEdgeId: string | null = null;
   let path: string[] = [];
+  const selectedEdges = new Set<string>();
 
   if (trace.initialState.type === "graph") {
     for (const item of trace.initialState.distances) {
@@ -257,6 +259,14 @@ function deriveGraphFrame(trace: Trace, step: number): GraphFrame {
       activeEdgeId = event.edgeId;
       distances.set(event.to, event.newDistance);
     }
+    if (event.type === "graphConsiderEdge" || event.type === "graphRejectEdge") {
+      activeEdgeId = event.edgeId;
+    }
+    if (event.type === "graphSelectEdge") {
+      activeNode = event.to;
+      activeEdgeId = event.edgeId;
+      selectedEdges.add(event.edgeId);
+    }
     if (event.type === "graphSettle") {
       activeNode = event.node;
       settled.add(event.node);
@@ -265,9 +275,13 @@ function deriveGraphFrame(trace: Trace, step: number): GraphFrame {
     if (event.type === "graphPath") {
       path = event.nodes;
     }
+    if (event.type === "graphSpanningTree") {
+      selectedEdges.clear();
+      event.edgeIds.forEach((edge) => selectedEdges.add(edge));
+    }
   }
 
-  return { distances, settled, activeNode, activeEdgeId, path };
+  return { distances, settled, activeNode, activeEdgeId, path, selectedEdges };
 }
 
 function drawEdge(
@@ -281,11 +295,12 @@ function drawEdge(
   if (!from || !to) return;
 
   const inPath = isPathEdge(edge, frame.path);
+  const selected = frame.selectedEdges.has(edge.id);
   const active = frame.activeEdgeId === edge.id;
-  const lineColor = active ? palette.compare : inPath ? palette.path : "rgba(47, 64, 95, 0.42)";
+  const lineColor = active ? palette.compare : selected || inPath ? palette.path : "rgba(47, 64, 95, 0.42)";
 
   context.strokeStyle = lineColor;
-  context.lineWidth = active || inPath ? 4 : 2;
+  context.lineWidth = active || selected || inPath ? 4 : 2;
   context.beginPath();
   context.moveTo(from.x, from.y);
   context.lineTo(to.x, to.y);

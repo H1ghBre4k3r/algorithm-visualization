@@ -65,6 +65,13 @@ export const algorithms: AlgorithmCatalogItem[] = [
     summary: "Relax weighted edges from a source until the shortest path is known.",
   },
   {
+    id: "primMst",
+    label: "Prim MST",
+    category: "graph",
+    status: "available",
+    summary: "Grow a minimum spanning tree from the lightest crossing edges.",
+  },
+  {
     id: "kmp",
     label: "Knuth-Morris-Pratt",
     category: "sequence",

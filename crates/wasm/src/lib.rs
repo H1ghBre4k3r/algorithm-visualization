@@ -17,6 +17,8 @@ pub fn example_request_for(algorithm: &str) -> Result<JsValue, JsValue> {
     let algorithm = match algorithm {
         "quicksort" => AlgorithmId::Quicksort,
         "dijkstra" => AlgorithmId::Dijkstra,
+        "primMst" => AlgorithmId::PrimMst,
+        "kmp" => AlgorithmId::Kmp,
         other => {
             return Err(JsValue::from_str(&format!(
                 "Unknown algorithm id '{other}'."
