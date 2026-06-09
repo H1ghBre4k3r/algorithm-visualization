@@ -2,6 +2,7 @@ export type AvailableAlgorithmId =
   | "quicksort"
   | "insertionSort"
   | "bubbleSort"
+  | "mergesort"
   | "bfs"
   | "dfs"
   | "dijkstra"
@@ -33,6 +34,7 @@ export type AlgorithmOptions =
   | { type: "quicksort"; value: QuicksortOptions }
   | { type: "insertionSort"; value: InsertionSortOptions }
   | { type: "bubbleSort"; value: BubbleSortOptions }
+  | { type: "mergesort"; value: MergesortOptions }
   | { type: "bfs"; value: BfsOptions }
   | { type: "dfs"; value: DfsOptions }
   | { type: "dijkstra"; value: DijkstraOptions }
@@ -46,6 +48,7 @@ export interface QuicksortOptions {
 
 export type InsertionSortOptions = Record<string, never>;
 export type BubbleSortOptions = Record<string, never>;
+export type MergesortOptions = Record<string, never>;
 
 export interface BfsOptions {
   stopAtTarget: boolean;

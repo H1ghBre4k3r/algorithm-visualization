@@ -72,6 +72,13 @@ export const algorithms: AlgorithmCatalogItem[] = [
     summary: "Repeatedly swap adjacent values until large items bubble right.",
   },
   {
+    id: "mergesort",
+    label: "Mergesort",
+    category: "sorting",
+    status: "available",
+    summary: "Split ranges recursively and merge sorted runs back together.",
+  },
+  {
     id: "bfs",
     label: "Breadth-First Search",
     category: "graph",

@@ -53,6 +53,7 @@ export default function App() {
     quicksort: customTemplate("quicksort"),
     insertionSort: customTemplate("insertionSort"),
     bubbleSort: customTemplate("bubbleSort"),
+    mergesort: customTemplate("mergesort"),
     bfs: customTemplate("bfs"),
     dfs: customTemplate("dfs"),
     dijkstra: customTemplate("dijkstra"),
@@ -468,6 +469,9 @@ function optionsForAlgorithm(algorithm: AvailableAlgorithmId): AlgorithmRequest[
   if (algorithm === "bubbleSort") {
     return { type: "bubbleSort", value: {} };
   }
+  if (algorithm === "mergesort") {
+    return { type: "mergesort", value: {} };
+  }
   if (algorithm === "kmp") {
     return { type: "kmp", value: {} };
   }
@@ -493,7 +497,12 @@ function randomControlLabel(algorithm: AvailableAlgorithmId) {
 }
 
 function isSortAlgorithm(algorithm: AvailableAlgorithmId) {
-  return algorithm === "quicksort" || algorithm === "insertionSort" || algorithm === "bubbleSort";
+  return (
+    algorithm === "quicksort" ||
+    algorithm === "insertionSort" ||
+    algorithm === "bubbleSort" ||
+    algorithm === "mergesort"
+  );
 }
 
 function isGraphAlgorithm(algorithm: AvailableAlgorithmId) {

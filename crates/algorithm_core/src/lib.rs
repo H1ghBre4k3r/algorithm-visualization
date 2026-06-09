@@ -9,6 +9,7 @@ pub enum AlgorithmId {
     Quicksort,
     InsertionSort,
     BubbleSort,
+    Mergesort,
     Bfs,
     Dfs,
     Dijkstra,
@@ -49,6 +50,7 @@ pub enum AlgorithmOptions {
     Quicksort(QuicksortOptions),
     InsertionSort(InsertionSortOptions),
     BubbleSort(BubbleSortOptions),
+    Mergesort(MergesortOptions),
     Bfs(BfsOptions),
     Dfs(DfsOptions),
     Dijkstra(DijkstraOptions),
@@ -75,6 +77,10 @@ pub struct InsertionSortOptions {}
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct BubbleSortOptions {}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct MergesortOptions {}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -355,6 +361,7 @@ pub fn generate_trace(request: AlgorithmRequest) -> Result<Trace, AlgorithmError
         (AlgorithmId::Quicksort, InputData::Sort(input)) => trace_quicksort(input),
         (AlgorithmId::InsertionSort, InputData::Sort(input)) => trace_insertion_sort(input),
         (AlgorithmId::BubbleSort, InputData::Sort(input)) => trace_bubble_sort(input),
+        (AlgorithmId::Mergesort, InputData::Sort(input)) => trace_mergesort(input),
         (AlgorithmId::Bfs, InputData::Graph(input)) => {
             let stop_at_target = match request.options {
                 Some(AlgorithmOptions::Bfs(options)) => options.stop_at_target,
@@ -387,6 +394,9 @@ pub fn generate_trace(request: AlgorithmRequest) -> Result<Trace, AlgorithmError
         )),
         (AlgorithmId::BubbleSort, _) => Err(AlgorithmError::new(
             "Bubble Sort requires sort input with a values array.",
+        )),
+        (AlgorithmId::Mergesort, _) => Err(AlgorithmError::new(
+            "Mergesort requires sort input with a values array.",
         )),
         (AlgorithmId::Bfs, _) => Err(AlgorithmError::new(
             "Breadth-first search requires graph input with nodes, edges, source, and target.",
@@ -438,6 +448,14 @@ pub fn example_request(algorithm: AlgorithmId) -> AlgorithmRequest {
                 values: vec![42, 12, 77, 18, 93, 31, 64, 5, 56, 29],
             }),
             options: Some(AlgorithmOptions::BubbleSort(BubbleSortOptions::default())),
+        },
+        AlgorithmId::Mergesort => AlgorithmRequest {
+            algorithm,
+            input_mode: InputMode::Example,
+            input: InputData::Sort(SortInput {
+                values: vec![42, 12, 77, 18, 93, 31, 64, 5, 56, 29],
+            }),
+            options: Some(AlgorithmOptions::Mergesort(MergesortOptions::default())),
         },
         AlgorithmId::Bfs => AlgorithmRequest {
             algorithm,
@@ -678,6 +696,132 @@ pub fn trace_bubble_sort(input: SortInput) -> Result<Trace, AlgorithmError> {
         events,
         metadata,
     })
+}
+
+pub fn trace_mergesort(input: SortInput) -> Result<Trace, AlgorithmError> {
+    if input.values.len() > 128 {
+        return Err(AlgorithmError::new(
+            "Mergesort input is capped at 128 values for interactive playback.",
+        ));
+    }
+
+    let initial_values = input.values.clone();
+    let mut values = input.values;
+    let mut events = Vec::new();
+
+    if !values.is_empty() {
+        let end = values.len() - 1;
+        mergesort_range(&mut values, 0, end, &mut events);
+        events.push(TraceEvent::SortMarkSorted {
+            indices: (0..values.len()).collect(),
+            message: "All values are in sorted order.".to_string(),
+        });
+    }
+
+    let metadata = TraceMetadata {
+        algorithm_name: "Mergesort".to_string(),
+        category: "Sorting".to_string(),
+        input_size: values.len(),
+        event_count: events.len(),
+        result_summary: format!("Sorted {} values.", values.len()),
+    };
+
+    Ok(Trace {
+        algorithm: AlgorithmId::Mergesort,
+        initial_state: VisualizationState::Array {
+            values: initial_values,
+        },
+        final_state: VisualizationState::Array { values },
+        events,
+        metadata,
+    })
+}
+
+fn mergesort_range(values: &mut [i32], start: usize, end: usize, events: &mut Vec<TraceEvent>) {
+    if start >= end {
+        events.push(TraceEvent::SortMarkSorted {
+            indices: vec![start],
+            message: format!("Single value at index {start} is sorted."),
+        });
+        return;
+    }
+
+    let middle = start + (end - start) / 2;
+    events.push(TraceEvent::SortPartition {
+        range: [start, end],
+        boundary: middle,
+        scanner: start,
+        message: format!("Split range {start}..{end} at {middle}."),
+    });
+
+    mergesort_range(values, start, middle, events);
+    mergesort_range(values, middle + 1, end, events);
+    merge_ranges(values, start, middle, end, events);
+}
+
+fn merge_ranges(
+    values: &mut [i32],
+    start: usize,
+    middle: usize,
+    end: usize,
+    events: &mut Vec<TraceEvent>,
+) {
+    let left = values[start..=middle].to_vec();
+    let right = values[middle + 1..=end].to_vec();
+    let mut left_index = 0;
+    let mut right_index = 0;
+    let mut write_index = start;
+
+    while left_index < left.len() && right_index < right.len() {
+        events.push(TraceEvent::SortCompare {
+            indices: [start + left_index, middle + 1 + right_index],
+            message: format!(
+                "Compare merge candidates {} and {}.",
+                left[left_index], right[right_index]
+            ),
+        });
+
+        if left[left_index] <= right[right_index] {
+            values[write_index] = left[left_index];
+            left_index += 1;
+        } else {
+            values[write_index] = right[right_index];
+            right_index += 1;
+        }
+        events.push(TraceEvent::SortSwap {
+            indices: [write_index, write_index],
+            values: values.to_vec(),
+            message: format!("Write merged value at index {write_index}."),
+        });
+        write_index += 1;
+    }
+
+    while left_index < left.len() {
+        values[write_index] = left[left_index];
+        events.push(TraceEvent::SortSwap {
+            indices: [write_index, write_index],
+            values: values.to_vec(),
+            message: format!("Copy remaining left value to index {write_index}."),
+        });
+        left_index += 1;
+        write_index += 1;
+    }
+
+    while right_index < right.len() {
+        values[write_index] = right[right_index];
+        events.push(TraceEvent::SortSwap {
+            indices: [write_index, write_index],
+            values: values.to_vec(),
+            message: format!("Copy remaining right value to index {write_index}."),
+        });
+        right_index += 1;
+        write_index += 1;
+    }
+
+    events.push(TraceEvent::SortMarkSorted {
+        indices: (start..=end).collect(),
+        message: format!("Merged range {start}..{end}."),
+    });
 }
 
 fn quicksort_range(values: &mut [i32], low: usize, high: usize, events: &mut Vec<TraceEvent>) {
@@ -1946,6 +2090,34 @@ mod tests {
     }
 
     #[test]
+    fn mergesort_trace_sorts_values() {
+        let trace = trace_mergesort(SortInput {
+            values: vec![9, 3, 7, 1, 4],
+        })
+        .expect("trace");
+
+        assert_eq!(
+            trace.final_state,
+            VisualizationState::Array {
+                values: vec![1, 3, 4, 7, 9]
+            }
+        );
+        assert!(
+            trace
+                .events
+                .iter()
+                .any(|event| matches!(event, TraceEvent::SortPartition { .. }))
+        );
+        assert!(
+            trace
+                .events
+                .iter()
+                .any(|event| matches!(event, TraceEvent::SortCompare { .. }))
+        );
+        assert_valid_sort_trace(&trace);
+    }
+
+    #[test]
     fn bfs_trace_finds_shortest_unweighted_path() {
         let trace = trace_bfs(example_graph(), true).expect("trace");
 
@@ -2151,6 +2323,7 @@ mod tests {
             AlgorithmId::Quicksort,
             AlgorithmId::InsertionSort,
             AlgorithmId::BubbleSort,
+            AlgorithmId::Mergesort,
             AlgorithmId::Bfs,
             AlgorithmId::Dfs,
             AlgorithmId::Dijkstra,
@@ -2160,9 +2333,10 @@ mod tests {
         ] {
             let trace = generate_trace(example_request(algorithm)).expect("trace");
             match algorithm {
-                AlgorithmId::Quicksort | AlgorithmId::InsertionSort | AlgorithmId::BubbleSort => {
-                    assert_valid_sort_trace(&trace)
-                }
+                AlgorithmId::Quicksort
+                | AlgorithmId::InsertionSort
+                | AlgorithmId::BubbleSort
+                | AlgorithmId::Mergesort => assert_valid_sort_trace(&trace),
                 AlgorithmId::Bfs
                 | AlgorithmId::Dfs
                 | AlgorithmId::Dijkstra
@@ -2178,7 +2352,10 @@ mod tests {
         };
         assert!(matches!(
             trace.algorithm,
-            AlgorithmId::Quicksort | AlgorithmId::InsertionSort | AlgorithmId::BubbleSort
+            AlgorithmId::Quicksort
+                | AlgorithmId::InsertionSort
+                | AlgorithmId::BubbleSort
+                | AlgorithmId::Mergesort
         ));
         assert_eq!(trace.metadata.event_count, trace.events.len());
 

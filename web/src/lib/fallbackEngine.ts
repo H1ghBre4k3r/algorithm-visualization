@@ -22,6 +22,10 @@ export function generateTraceFallback(request: AlgorithmRequest): Trace {
     return traceBubbleSort(request.input.value);
   }
 
+  if (request.algorithm === "mergesort" && request.input.type === "sort") {
+    return traceMergesort(request.input.value);
+  }
+
   if (request.algorithm === "dijkstra" && request.input.type === "graph") {
     const stopAtTarget =
       request.options?.type === "dijkstra" ? request.options.value.stopAtTarget : true;
@@ -225,6 +229,124 @@ function traceBubbleSort(input: SortInput): Trace {
       resultSummary: `Sorted ${values.length} values.`,
     },
   };
+}
+
+function traceMergesort(input: SortInput): Trace {
+  const initialValues = [...input.values];
+  const values = [...input.values];
+  const events: TraceEvent[] = [];
+
+  if (values.length > 128) {
+    throw new Error("Mergesort input is capped at 128 values for interactive playback.");
+  }
+
+  if (values.length > 0) {
+    mergesortRange(values, 0, values.length - 1, events);
+    events.push({
+      type: "sortMarkSorted",
+      indices: values.map((_, index) => index),
+      message: "All values are in sorted order.",
+    });
+  }
+
+  return {
+    algorithm: "mergesort",
+    initialState: { type: "array", values: initialValues },
+    finalState: { type: "array", values },
+    events,
+    metadata: {
+      algorithmName: "Mergesort",
+      category: "Sorting",
+      inputSize: values.length,
+      eventCount: events.length,
+      resultSummary: `Sorted ${values.length} values.`,
+    },
+  };
+}
+
+function mergesortRange(values: number[], start: number, end: number, events: TraceEvent[]) {
+  if (start >= end) {
+    events.push({
+      type: "sortMarkSorted",
+      indices: [start],
+      message: `Single value at index ${start} is sorted.`,
+    });
+    return;
+  }
+
+  const middle = start + Math.floor((end - start) / 2);
+  events.push({
+    type: "sortPartition",
+    range: [start, end],
+    boundary: middle,
+    scanner: start,
+    message: `Split range ${start}..${end} at ${middle}.`,
+  });
+
+  mergesortRange(values, start, middle, events);
+  mergesortRange(values, middle + 1, end, events);
+  mergeRanges(values, start, middle, end, events);
+}
+
+function mergeRanges(values: number[], start: number, middle: number, end: number, events: TraceEvent[]) {
+  const left = values.slice(start, middle + 1);
+  const right = values.slice(middle + 1, end + 1);
+  let leftIndex = 0;
+  let rightIndex = 0;
+  let writeIndex = start;
+
+  while (leftIndex < left.length && rightIndex < right.length) {
+    events.push({
+      type: "sortCompare",
+      indices: [start + leftIndex, middle + 1 + rightIndex],
+      message: `Compare merge candidates ${left[leftIndex]} and ${right[rightIndex]}.`,
+    });
+
+    if (left[leftIndex] <= right[rightIndex]) {
+      values[writeIndex] = left[leftIndex];
+      leftIndex += 1;
+    } else {
+      values[writeIndex] = right[rightIndex];
+      rightIndex += 1;
+    }
+    events.push({
+      type: "sortSwap",
+      indices: [writeIndex, writeIndex],
+      values: [...values],
+      message: `Write merged value at index ${writeIndex}.`,
+    });
+    writeIndex += 1;
+  }
+
+  while (leftIndex < left.length) {
+    values[writeIndex] = left[leftIndex];
+    events.push({
+      type: "sortSwap",
+      indices: [writeIndex, writeIndex],
+      values: [...values],
+      message: `Copy remaining left value to index ${writeIndex}.`,
+    });
+    leftIndex += 1;
+    writeIndex += 1;
+  }
+
+  while (rightIndex < right.length) {
+    values[writeIndex] = right[rightIndex];
+    events.push({
+      type: "sortSwap",
+      indices: [writeIndex, writeIndex],
+      values: [...values],
+      message: `Copy remaining right value to index ${writeIndex}.`,
+    });
+    rightIndex += 1;
+    writeIndex += 1;
+  }
+
+  events.push({
+    type: "sortMarkSorted",
+    indices: Array.from({ length: end - start + 1 }, (_, index) => start + index),
+    message: `Merged range ${start}..${end}.`,
+  });
 }
 
 function quicksortRange(values: number[], low: number, high: number, events: TraceEvent[]) {
