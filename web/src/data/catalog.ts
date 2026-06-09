@@ -114,6 +114,13 @@ export const algorithms: AlgorithmCatalogItem[] = [
     summary: "Grow a minimum spanning tree from the lightest crossing edges.",
   },
   {
+    id: "kruskal",
+    label: "Kruskal",
+    category: "graph",
+    status: "available",
+    summary: "Scan edges by weight and join components without cycles.",
+  },
+  {
     id: "kmp",
     label: "Knuth-Morris-Pratt",
     category: "sequence",

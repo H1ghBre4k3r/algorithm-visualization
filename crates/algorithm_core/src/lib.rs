@@ -15,6 +15,7 @@ pub enum AlgorithmId {
     Dfs,
     Dijkstra,
     PrimMst,
+    Kruskal,
     Kmp,
     Levenshtein,
 }
@@ -57,6 +58,7 @@ pub enum AlgorithmOptions {
     Dfs(DfsOptions),
     Dijkstra(DijkstraOptions),
     PrimMst(PrimMstOptions),
+    Kruskal(KruskalOptions),
     Kmp(KmpOptions),
     Levenshtein(LevenshteinOptions),
 }
@@ -112,6 +114,10 @@ pub struct DijkstraOptions {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct PrimMstOptions {}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct KruskalOptions {}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
@@ -391,6 +397,7 @@ pub fn generate_trace(request: AlgorithmRequest) -> Result<Trace, AlgorithmError
             trace_dijkstra(input, stop_at_target)
         }
         (AlgorithmId::PrimMst, InputData::Graph(input)) => trace_prim_mst(input),
+        (AlgorithmId::Kruskal, InputData::Graph(input)) => trace_kruskal(input),
         (AlgorithmId::Kmp, InputData::Sequence(input)) => trace_kmp(input),
         (AlgorithmId::Levenshtein, InputData::Sequence(input)) => trace_levenshtein(input),
         (AlgorithmId::Quicksort, _) => Err(AlgorithmError::new(
@@ -419,6 +426,9 @@ pub fn generate_trace(request: AlgorithmRequest) -> Result<Trace, AlgorithmError
         )),
         (AlgorithmId::PrimMst, _) => Err(AlgorithmError::new(
             "Prim MST requires undirected graph input with nodes and weighted edges.",
+        )),
+        (AlgorithmId::Kruskal, _) => Err(AlgorithmError::new(
+            "Kruskal requires undirected graph input with nodes and weighted edges.",
         )),
         (AlgorithmId::Kmp, _) => Err(AlgorithmError::new(
             "Knuth-Morris-Pratt requires sequence input with text and pattern.",
@@ -504,6 +514,12 @@ pub fn example_request(algorithm: AlgorithmId) -> AlgorithmRequest {
             input_mode: InputMode::Example,
             input: InputData::Graph(example_graph()),
             options: Some(AlgorithmOptions::PrimMst(PrimMstOptions::default())),
+        },
+        AlgorithmId::Kruskal => AlgorithmRequest {
+            algorithm,
+            input_mode: InputMode::Example,
+            input: InputData::Graph(example_graph()),
+            options: Some(AlgorithmOptions::Kruskal(KruskalOptions::default())),
         },
         AlgorithmId::Kmp => AlgorithmRequest {
             algorithm,
@@ -1658,6 +1674,114 @@ pub fn trace_prim_mst(input: GraphInput) -> Result<Trace, AlgorithmError> {
     })
 }
 
+pub fn trace_kruskal(input: GraphInput) -> Result<Trace, AlgorithmError> {
+    validate_graph(&input)?;
+    validate_mst_graph(&input)?;
+
+    let node_order = input
+        .nodes
+        .iter()
+        .map(|node| node.id.clone())
+        .collect::<Vec<_>>();
+    let mut edges_by_weight = input.edges.iter().enumerate().collect::<Vec<_>>();
+    edges_by_weight.sort_by_key(|(index, edge)| (edge.weight, *index));
+
+    let mut union_find = UnionFind::new(&node_order);
+    let mut selected_edges = Vec::new();
+    let mut total_weight = 0;
+    let mut events = Vec::new();
+
+    for (_, edge) in edges_by_weight {
+        events.push(TraceEvent::GraphConsiderEdge {
+            edge_id: edge.id.clone(),
+            from: edge.from.clone(),
+            to: edge.to.clone(),
+            weight: edge.weight,
+            message: format!(
+                "Consider edge {} with weight {} in sorted order.",
+                edge.id, edge.weight
+            ),
+        });
+
+        if union_find.connected(&edge.from, &edge.to) {
+            events.push(TraceEvent::GraphRejectEdge {
+                edge_id: edge.id.clone(),
+                from: edge.from.clone(),
+                to: edge.to.clone(),
+                weight: edge.weight,
+                message: format!("Reject edge {} because it would create a cycle.", edge.id),
+            });
+            continue;
+        }
+
+        union_find.union(&edge.from, &edge.to);
+        selected_edges.push(edge.id.clone());
+        total_weight += edge.weight;
+        events.push(TraceEvent::GraphSelectEdge {
+            edge_id: edge.id.clone(),
+            from: edge.from.clone(),
+            to: edge.to.clone(),
+            weight: edge.weight,
+            total_weight,
+            message: format!("Select edge {} and merge its two components.", edge.id),
+        });
+
+        if selected_edges.len() == input.nodes.len().saturating_sub(1) {
+            break;
+        }
+    }
+
+    if selected_edges.len() != input.nodes.len().saturating_sub(1) {
+        return Err(AlgorithmError::new(
+            "Kruskal requires a connected graph to span every node.",
+        ));
+    }
+
+    events.push(TraceEvent::GraphSpanningTree {
+        edge_ids: selected_edges.clone(),
+        total_weight,
+        message: format!("Minimum spanning tree complete with total weight {total_weight}."),
+    });
+
+    let distances = node_order
+        .iter()
+        .map(|node| NodeDistance {
+            node: node.clone(),
+            distance: None,
+        })
+        .collect::<Vec<_>>();
+
+    let metadata = TraceMetadata {
+        algorithm_name: "Kruskal".to_string(),
+        category: "Graph".to_string(),
+        input_size: input.nodes.len(),
+        event_count: events.len(),
+        result_summary: format!("MST total weight is {total_weight}."),
+    };
+
+    Ok(Trace {
+        algorithm: AlgorithmId::Kruskal,
+        initial_state: VisualizationState::Graph {
+            nodes: input.nodes.clone(),
+            edges: input.edges.clone(),
+            source: input.source.clone(),
+            target: None,
+            distances: distances.clone(),
+            path: Vec::new(),
+        },
+        final_state: VisualizationState::Graph {
+            nodes: input.nodes,
+            edges: input.edges,
+            source: input.source,
+            target: None,
+            distances,
+            path: selected_edges,
+        },
+        events,
+        metadata,
+    })
+}
+
 pub fn trace_kmp(input: SequenceInput) -> Result<Trace, AlgorithmError> {
     validate_sequence(&input)?;
 
@@ -2040,16 +2164,74 @@ fn validate_graph(input: &GraphInput) -> Result<(), AlgorithmError> {
 fn validate_mst_graph(input: &GraphInput) -> Result<(), AlgorithmError> {
     if input.edges.is_empty() {
         return Err(AlgorithmError::new(
-            "Prim MST requires at least one weighted edge.",
+            "MST algorithms require at least one weighted edge.",
         ));
     }
     if let Some(edge) = input.edges.iter().find(|edge| edge.directed) {
         return Err(AlgorithmError::new(format!(
-            "Prim MST requires undirected edges; edge '{}' is directed.",
+            "MST algorithms require undirected edges; edge '{}' is directed.",
             edge.id
         )));
     }
     Ok(())
+}
+
+struct UnionFind {
+    parent: HashMap<String, String>,
+    rank: HashMap<String, usize>,
+}
+
+impl UnionFind {
+    fn new(nodes: &[String]) -> Self {
+        Self {
+            parent: nodes
+                .iter()
+                .map(|node| (node.clone(), node.clone()))
+                .collect::<HashMap<_, _>>(),
+            rank: nodes
+                .iter()
+                .map(|node| (node.clone(), 0))
+                .collect::<HashMap<_, _>>(),
+        }
+    }
+
+    fn find(&mut self, node: &str) -> String {
+        let parent = self
+            .parent
+            .get(node)
+            .cloned()
+            .unwrap_or_else(|| node.to_string());
+        if parent != node {
+            let root = self.find(&parent);
+            self.parent.insert(node.to_string(), root.clone());
+            root
+        } else {
+            parent
+        }
+    }
+
+    fn connected(&mut self, left: &str, right: &str) -> bool {
+        self.find(left) == self.find(right)
+    }
+
+    fn union(&mut self, left: &str, right: &str) {
+        let left_root = self.find(left);
+        let right_root = self.find(right);
+        if left_root == right_root {
+            return;
+        }
+
+        let left_rank = *self.rank.get(&left_root).unwrap_or(&0);
+        let right_rank = *self.rank.get(&right_root).unwrap_or(&0);
+        if left_rank < right_rank {
+            self.parent.insert(left_root, right_root);
+        } else if left_rank > right_rank {
+            self.parent.insert(right_root, left_root);
+        } else {
+            self.parent.insert(right_root.clone(), left_root.clone());
+            self.rank.insert(left_root, left_rank + 1);
+        }
+    }
 }
 
 fn reconstruct_path(
@@ -2429,11 +2611,49 @@ mod tests {
     }
 
     #[test]
+    fn kruskal_trace_finds_minimum_spanning_tree() {
+        let trace = trace_kruskal(example_graph()).expect("trace");
+
+        let tree = trace.events.iter().find_map(|event| match event {
+            TraceEvent::GraphSpanningTree {
+                edge_ids,
+                total_weight,
+                ..
+            } => Some((edge_ids.clone(), *total_weight)),
+            _ => None,
+        });
+
+        assert_eq!(
+            tree,
+            Some((
+                vec![
+                    "BC".to_string(),
+                    "AC".to_string(),
+                    "DE".to_string(),
+                    "EF".to_string(),
+                    "BD".to_string()
+                ],
+                13
+            ))
+        );
+        assert_valid_graph_trace(&trace);
+    }
+
+    #[test]
     fn prim_mst_rejects_directed_edges() {
         let mut graph = example_graph();
         graph.edges[0].directed = true;
 
         let error = trace_prim_mst(graph).expect_err("invalid graph");
+        assert!(error.message().contains("undirected"));
+    }
+
+    #[test]
+    fn kruskal_rejects_directed_edges() {
+        let mut graph = example_graph();
+        graph.edges[0].directed = true;
+
+        let error = trace_kruskal(graph).expect_err("invalid graph");
         assert!(error.message().contains("undirected"));
     }
 
@@ -2510,6 +2730,7 @@ mod tests {
             AlgorithmId::Dfs,
             AlgorithmId::Dijkstra,
             AlgorithmId::PrimMst,
+            AlgorithmId::Kruskal,
             AlgorithmId::Kmp,
             AlgorithmId::Levenshtein,
         ] {
@@ -2523,7 +2744,8 @@ mod tests {
                 AlgorithmId::Bfs
                 | AlgorithmId::Dfs
                 | AlgorithmId::Dijkstra
-                | AlgorithmId::PrimMst => assert_valid_graph_trace(&trace),
+                | AlgorithmId::PrimMst
+                | AlgorithmId::Kruskal => assert_valid_graph_trace(&trace),
                 AlgorithmId::Kmp | AlgorithmId::Levenshtein => assert_valid_sequence_trace(&trace),
             }
         }
@@ -2597,7 +2819,11 @@ mod tests {
 
         assert!(matches!(
             trace.algorithm,
-            AlgorithmId::Bfs | AlgorithmId::Dfs | AlgorithmId::Dijkstra | AlgorithmId::PrimMst
+            AlgorithmId::Bfs
+                | AlgorithmId::Dfs
+                | AlgorithmId::Dijkstra
+                | AlgorithmId::PrimMst
+                | AlgorithmId::Kruskal
         ));
         assert_eq!(trace.metadata.event_count, trace.events.len());
 

@@ -93,12 +93,15 @@ export function exampleRequest(algorithm: AvailableAlgorithmId): AlgorithmReques
     };
   }
 
-  if (algorithm === "primMst") {
+  if (algorithm === "primMst" || algorithm === "kruskal") {
     return {
       algorithm,
       inputMode: "example",
       input: { type: "graph", value: structuredClone(exampleGraphInput) },
-      options: { type: "primMst", value: {} },
+      options:
+        algorithm === "primMst"
+          ? { type: "primMst", value: {} }
+          : { type: "kruskal", value: {} },
     };
   }
 

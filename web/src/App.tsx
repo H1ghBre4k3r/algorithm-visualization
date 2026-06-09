@@ -59,6 +59,7 @@ export default function App() {
     dfs: customTemplate("dfs"),
     dijkstra: customTemplate("dijkstra"),
     primMst: customTemplate("primMst"),
+    kruskal: customTemplate("kruskal"),
     kmp: customTemplate("kmp"),
     levenshtein: customTemplate("levenshtein"),
   });
@@ -491,6 +492,9 @@ function optionsForAlgorithm(algorithm: AvailableAlgorithmId): AlgorithmRequest[
   if (algorithm === "primMst") {
     return { type: "primMst", value: {} };
   }
+  if (algorithm === "kruskal") {
+    return { type: "kruskal", value: {} };
+  }
   return { type: "dijkstra", value: { stopAtTarget: true } };
 }
 
@@ -511,7 +515,13 @@ function isSortAlgorithm(algorithm: AvailableAlgorithmId) {
 }
 
 function isGraphAlgorithm(algorithm: AvailableAlgorithmId) {
-  return algorithm === "bfs" || algorithm === "dfs" || algorithm === "dijkstra" || algorithm === "primMst";
+  return (
+    algorithm === "bfs" ||
+    algorithm === "dfs" ||
+    algorithm === "dijkstra" ||
+    algorithm === "primMst" ||
+    algorithm === "kruskal"
+  );
 }
 
 function VisualizationCanvas({ trace, step }: { trace: Trace; step: number }) {

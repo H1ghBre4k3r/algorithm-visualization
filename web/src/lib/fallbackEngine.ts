@@ -50,6 +50,10 @@ export function generateTraceFallback(request: AlgorithmRequest): Trace {
     return tracePrimMst(request.input.value);
   }
 
+  if (request.algorithm === "kruskal" && request.input.type === "graph") {
+    return traceKruskal(request.input.value);
+  }
+
   if (request.algorithm === "kmp" && request.input.type === "sequence") {
     return traceKmp(request.input.value);
   }
@@ -1099,6 +1103,104 @@ function tracePrimMst(input: GraphInput): Trace {
   };
 }
 
+function traceKruskal(input: GraphInput): Trace {
+  validateGraph(input);
+  validateMstGraph(input);
+
+  const nodeOrder = input.nodes.map((node) => node.id);
+  const unionFind = new UnionFind(nodeOrder);
+  const selectedEdges: string[] = [];
+  const events: TraceEvent[] = [];
+  let totalWeight = 0;
+
+  const edgesByWeight = input.edges
+    .map((edge, index) => ({ edge, index }))
+    .sort((left, right) => left.edge.weight - right.edge.weight || left.index - right.index);
+
+  for (const { edge } of edgesByWeight) {
+    events.push({
+      type: "graphConsiderEdge",
+      edgeId: edge.id,
+      from: edge.from,
+      to: edge.to,
+      weight: edge.weight,
+      message: `Consider edge ${edge.id} with weight ${edge.weight} in sorted order.`,
+    });
+
+    if (unionFind.connected(edge.from, edge.to)) {
+      events.push({
+        type: "graphRejectEdge",
+        edgeId: edge.id,
+        from: edge.from,
+        to: edge.to,
+        weight: edge.weight,
+        message: `Reject edge ${edge.id} because it would create a cycle.`,
+      });
+      continue;
+    }
+
+    unionFind.union(edge.from, edge.to);
+    selectedEdges.push(edge.id);
+    totalWeight += edge.weight;
+    events.push({
+      type: "graphSelectEdge",
+      edgeId: edge.id,
+      from: edge.from,
+      to: edge.to,
+      weight: edge.weight,
+      totalWeight,
+      message: `Select edge ${edge.id} and merge its two components.`,
+    });
+
+    if (selectedEdges.length === Math.max(0, input.nodes.length - 1)) {
+      break;
+    }
+  }
+
+  if (selectedEdges.length !== Math.max(0, input.nodes.length - 1)) {
+    throw new Error("Kruskal requires a connected graph to span every node.");
+  }
+
+  events.push({
+    type: "graphSpanningTree",
+    edgeIds: selectedEdges,
+    totalWeight,
+    message: `Minimum spanning tree complete with total weight ${totalWeight}.`,
+  });
+
+  const distances = nodeOrder.map<NodeDistance>((node) => ({ node, distance: null }));
+
+  return {
+    algorithm: "kruskal",
+    initialState: {
+      type: "graph",
+      nodes: input.nodes,
+      edges: input.edges,
+      source: input.source,
+      target: null,
+      distances,
+      path: [],
+    },
+    finalState: {
+      type: "graph",
+      nodes: input.nodes,
+      edges: input.edges,
+      source: input.source,
+      target: null,
+      distances,
+      path: selectedEdges,
+    },
+    events,
+    metadata: {
+      algorithmName: "Kruskal",
+      category: "Graph",
+      inputSize: input.nodes.length,
+      eventCount: events.length,
+      resultSummary: `MST total weight is ${totalWeight}.`,
+    },
+  };
+}
+
 function traceKmp(input: SequenceInput): Trace {
   validateSequence(input);
 
@@ -1418,11 +1520,53 @@ function validateGraph(input: GraphInput) {
 
 function validateMstGraph(input: GraphInput) {
   if (input.edges.length === 0) {
-    throw new Error("Prim MST requires at least one weighted edge.");
+    throw new Error("MST algorithms require at least one weighted edge.");
   }
   const directedEdge = input.edges.find((edge) => edge.directed);
   if (directedEdge) {
-    throw new Error(`Prim MST requires undirected edges; edge '${directedEdge.id}' is directed.`);
+    throw new Error(`MST algorithms require undirected edges; edge '${directedEdge.id}' is directed.`);
+  }
+}
+
+class UnionFind {
+  private parent = new Map<string, string>();
+  private rank = new Map<string, number>();
+
+  constructor(nodes: string[]) {
+    for (const node of nodes) {
+      this.parent.set(node, node);
+      this.rank.set(node, 0);
+    }
+  }
+
+  connected(left: string, right: string) {
+    return this.find(left) === this.find(right);
+  }
+
+  union(left: string, right: string) {
+    const leftRoot = this.find(left);
+    const rightRoot = this.find(right);
+    if (leftRoot === rightRoot) return;
+
+    const leftRank = this.rank.get(leftRoot) ?? 0;
+    const rightRank = this.rank.get(rightRoot) ?? 0;
+    if (leftRank < rightRank) {
+      this.parent.set(leftRoot, rightRoot);
+    } else if (leftRank > rightRank) {
+      this.parent.set(rightRoot, leftRoot);
+    } else {
+      this.parent.set(rightRoot, leftRoot);
+      this.rank.set(leftRoot, leftRank + 1);
+    }
+  }
+
+  private find(node: string): string {
+    const parent = this.parent.get(node) ?? node;
+    if (parent === node) return parent;
+
+    const root = this.find(parent);
+    this.parent.set(node, root);
+    return root;
   }
 }
 

@@ -8,6 +8,7 @@ export type AvailableAlgorithmId =
   | "dfs"
   | "dijkstra"
   | "primMst"
+  | "kruskal"
   | "kmp"
   | "levenshtein";
 export type PlannedAlgorithmId =
@@ -41,6 +42,7 @@ export type AlgorithmOptions =
   | { type: "dfs"; value: DfsOptions }
   | { type: "dijkstra"; value: DijkstraOptions }
   | { type: "primMst"; value: PrimMstOptions }
+  | { type: "kruskal"; value: KruskalOptions }
   | { type: "kmp"; value: KmpOptions }
   | { type: "levenshtein"; value: LevenshteinOptions };
 
@@ -66,6 +68,7 @@ export interface DijkstraOptions {
 }
 
 export type PrimMstOptions = Record<string, never>;
+export type KruskalOptions = Record<string, never>;
 export type KmpOptions = Record<string, never>;
 export type LevenshteinOptions = Record<string, never>;
 

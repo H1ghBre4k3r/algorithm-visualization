@@ -24,6 +24,7 @@ pub fn example_request_for(algorithm: &str) -> Result<JsValue, JsValue> {
         "dfs" => AlgorithmId::Dfs,
         "dijkstra" => AlgorithmId::Dijkstra,
         "primMst" => AlgorithmId::PrimMst,
+        "kruskal" => AlgorithmId::Kruskal,
         "kmp" => AlgorithmId::Kmp,
         "levenshtein" => AlgorithmId::Levenshtein,
         other => {
