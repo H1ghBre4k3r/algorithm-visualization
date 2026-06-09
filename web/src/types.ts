@@ -4,6 +4,7 @@ export type AvailableAlgorithmId =
   | "bubbleSort"
   | "selectionSort"
   | "shellSort"
+  | "countingSort"
   | "mergesort"
   | "heapSort"
   | "bfs"
@@ -42,6 +43,7 @@ export type AlgorithmOptions =
   | { type: "bubbleSort"; value: BubbleSortOptions }
   | { type: "selectionSort"; value: SelectionSortOptions }
   | { type: "shellSort"; value: ShellSortOptions }
+  | { type: "countingSort"; value: CountingSortOptions }
   | { type: "mergesort"; value: MergesortOptions }
   | { type: "heapSort"; value: HeapSortOptions }
   | { type: "bfs"; value: BfsOptions }
@@ -62,6 +64,7 @@ export type InsertionSortOptions = Record<string, never>;
 export type BubbleSortOptions = Record<string, never>;
 export type SelectionSortOptions = Record<string, never>;
 export type ShellSortOptions = Record<string, never>;
+export type CountingSortOptions = Record<string, never>;
 export type MergesortOptions = Record<string, never>;
 export type HeapSortOptions = Record<string, never>;
 

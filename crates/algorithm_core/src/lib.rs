@@ -11,6 +11,7 @@ pub enum AlgorithmId {
     BubbleSort,
     SelectionSort,
     ShellSort,
+    CountingSort,
     Mergesort,
     HeapSort,
     Bfs,
@@ -58,6 +59,7 @@ pub enum AlgorithmOptions {
     BubbleSort(BubbleSortOptions),
     SelectionSort(SelectionSortOptions),
     ShellSort(ShellSortOptions),
+    CountingSort(CountingSortOptions),
     Mergesort(MergesortOptions),
     HeapSort(HeapSortOptions),
     Bfs(BfsOptions),
@@ -97,6 +99,10 @@ pub struct SelectionSortOptions {}
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct ShellSortOptions {}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct CountingSortOptions {}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
@@ -406,6 +412,7 @@ pub fn generate_trace(request: AlgorithmRequest) -> Result<Trace, AlgorithmError
         (AlgorithmId::BubbleSort, InputData::Sort(input)) => trace_bubble_sort(input),
         (AlgorithmId::SelectionSort, InputData::Sort(input)) => trace_selection_sort(input),
         (AlgorithmId::ShellSort, InputData::Sort(input)) => trace_shell_sort(input),
+        (AlgorithmId::CountingSort, InputData::Sort(input)) => trace_counting_sort(input),
         (AlgorithmId::Mergesort, InputData::Sort(input)) => trace_mergesort(input),
         (AlgorithmId::HeapSort, InputData::Sort(input)) => trace_heap_sort(input),
         (AlgorithmId::Bfs, InputData::Graph(input)) => {
@@ -455,6 +462,9 @@ pub fn generate_trace(request: AlgorithmRequest) -> Result<Trace, AlgorithmError
         )),
         (AlgorithmId::ShellSort, _) => Err(AlgorithmError::new(
             "Shell Sort requires sort input with a values array.",
+        )),
+        (AlgorithmId::CountingSort, _) => Err(AlgorithmError::new(
+            "Counting Sort requires sort input with a non-negative values array.",
         )),
         (AlgorithmId::Mergesort, _) => Err(AlgorithmError::new(
             "Mergesort requires sort input with a values array.",
@@ -539,6 +549,16 @@ pub fn example_request(algorithm: AlgorithmId) -> AlgorithmRequest {
                 values: vec![42, 12, 77, 18, 93, 31, 64, 5, 56, 29],
             }),
             options: Some(AlgorithmOptions::ShellSort(ShellSortOptions::default())),
+        },
+        AlgorithmId::CountingSort => AlgorithmRequest {
+            algorithm,
+            input_mode: InputMode::Example,
+            input: InputData::Sort(SortInput {
+                values: vec![42, 12, 77, 18, 93, 31, 64, 5, 56, 29],
+            }),
+            options: Some(AlgorithmOptions::CountingSort(
+                CountingSortOptions::default(),
+            )),
         },
         AlgorithmId::Mergesort => AlgorithmRequest {
             algorithm,
@@ -990,6 +1010,88 @@ pub fn trace_shell_sort(input: SortInput) -> Result<Trace, AlgorithmError> {
 
     Ok(Trace {
         algorithm: AlgorithmId::ShellSort,
+        initial_state: VisualizationState::Array {
+            values: initial_values,
+        },
+        final_state: VisualizationState::Array { values },
+        events,
+        metadata,
+    })
+}
+
+pub fn trace_counting_sort(input: SortInput) -> Result<Trace, AlgorithmError> {
+    if input.values.len() > 128 {
+        return Err(AlgorithmError::new(
+            "Counting Sort input is capped at 128 values for interactive playback.",
+        ));
+    }
+    if let Some(value) = input.values.iter().find(|value| **value < 0) {
+        return Err(AlgorithmError::new(format!(
+            "Counting Sort requires non-negative integers; found {value}."
+        )));
+    }
+
+    let initial_values = input.values.clone();
+    let mut values = input.values;
+    let mut events = Vec::new();
+    let max_value = values.iter().copied().max().unwrap_or(0) as usize;
+    if max_value > 512 {
+        return Err(AlgorithmError::new(
+            "Counting Sort supports values up to 512 for interactive playback.",
+        ));
+    }
+
+    let mut counts = vec![0usize; max_value + 1];
+    for (index, value) in values.iter().enumerate() {
+        let bucket = *value as usize;
+        counts[bucket] += 1;
+        events.push(TraceEvent::SortCompare {
+            indices: [index, index],
+            message: format!(
+                "Count value {value}; bucket {bucket} now holds {}.",
+                counts[bucket]
+            ),
+        });
+    }
+
+    let mut write_index = 0;
+    for (bucket, count) in counts.iter().enumerate() {
+        if *count == 0 {
+            continue;
+        }
+
+        events.push(TraceEvent::SortPartition {
+            range: [write_index, values.len().saturating_sub(1)],
+            boundary: write_index,
+            scanner: write_index,
+            message: format!("Write {count} occurrence(s) of value {bucket}."),
+        });
+
+        for _ in 0..*count {
+            values[write_index] = bucket as i32;
+            events.push(TraceEvent::SortSwap {
+                indices: [write_index, write_index],
+                values: values.clone(),
+                message: format!("Place value {bucket} at index {write_index}."),
+            });
+            events.push(TraceEvent::SortMarkSorted {
+                indices: (0..=write_index).collect(),
+                message: format!("Positions 0 through {write_index} are reconstructed."),
+            });
+            write_index += 1;
+        }
+    }
+
+    let metadata = TraceMetadata {
+        algorithm_name: "Counting Sort".to_string(),
+        category: "Sorting".to_string(),
+        input_size: values.len(),
+        event_count: events.len(),
+        result_summary: format!("Sorted {} values.", values.len()),
+    };
+
+    Ok(Trace {
+        algorithm: AlgorithmId::CountingSort,
         initial_state: VisualizationState::Array {
             values: initial_values,
         },
@@ -3108,6 +3210,44 @@ mod tests {
     }
 
     #[test]
+    fn counting_sort_trace_sorts_values() {
+        let trace = trace_counting_sort(SortInput {
+            values: vec![9, 3, 7, 1, 4, 3],
+        })
+        .expect("trace");
+
+        assert_eq!(
+            trace.final_state,
+            VisualizationState::Array {
+                values: vec![1, 3, 3, 4, 7, 9]
+            }
+        );
+        assert!(
+            trace
+                .events
+                .iter()
+                .any(|event| matches!(event, TraceEvent::SortCompare { .. }))
+        );
+        assert!(
+            trace
+                .events
+                .iter()
+                .any(|event| matches!(event, TraceEvent::SortSwap { .. }))
+        );
+        assert_valid_sort_trace(&trace);
+    }
+
+    #[test]
+    fn counting_sort_rejects_negative_values() {
+        let error = trace_counting_sort(SortInput {
+            values: vec![3, -1, 2],
+        })
+        .expect_err("invalid counting sort input");
+
+        assert!(error.message().contains("non-negative"));
+    }
+
+    #[test]
     fn mergesort_trace_sorts_values() {
         let trace = trace_mergesort(SortInput {
             values: vec![9, 3, 7, 1, 4],
@@ -3469,6 +3609,7 @@ mod tests {
             AlgorithmId::BubbleSort,
             AlgorithmId::SelectionSort,
             AlgorithmId::ShellSort,
+            AlgorithmId::CountingSort,
             AlgorithmId::Mergesort,
             AlgorithmId::HeapSort,
             AlgorithmId::Bfs,
@@ -3488,6 +3629,7 @@ mod tests {
                 | AlgorithmId::BubbleSort
                 | AlgorithmId::SelectionSort
                 | AlgorithmId::ShellSort
+                | AlgorithmId::CountingSort
                 | AlgorithmId::Mergesort
                 | AlgorithmId::HeapSort => assert_valid_sort_trace(&trace),
                 AlgorithmId::Bfs
@@ -3513,6 +3655,7 @@ mod tests {
                 | AlgorithmId::BubbleSort
                 | AlgorithmId::SelectionSort
                 | AlgorithmId::ShellSort
+                | AlgorithmId::CountingSort
                 | AlgorithmId::Mergesort
                 | AlgorithmId::HeapSort
         ));

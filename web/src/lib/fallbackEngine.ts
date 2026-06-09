@@ -30,6 +30,10 @@ export function generateTraceFallback(request: AlgorithmRequest): Trace {
     return traceShellSort(request.input.value);
   }
 
+  if (request.algorithm === "countingSort" && request.input.type === "sort") {
+    return traceCountingSort(request.input.value);
+  }
+
   if (request.algorithm === "mergesort" && request.input.type === "sort") {
     return traceMergesort(request.input.value);
   }
@@ -411,6 +415,81 @@ function traceShellSort(input: SortInput): Trace {
     events,
     metadata: {
       algorithmName: "Shell Sort",
+      category: "Sorting",
+      inputSize: values.length,
+      eventCount: events.length,
+      resultSummary: `Sorted ${values.length} values.`,
+    },
+  };
+}
+
+function traceCountingSort(input: SortInput): Trace {
+  const initialValues = [...input.values];
+  const values = [...input.values];
+  const events: TraceEvent[] = [];
+
+  if (values.length > 128) {
+    throw new Error("Counting Sort input is capped at 128 values for interactive playback.");
+  }
+
+  const negativeValue = values.find((value) => value < 0);
+  if (negativeValue !== undefined) {
+    throw new Error(`Counting Sort requires non-negative integers; found ${negativeValue}.`);
+  }
+
+  const maxValue = Math.max(0, ...values);
+  if (maxValue > 512) {
+    throw new Error("Counting Sort supports values up to 512 for interactive playback.");
+  }
+
+  const counts = Array.from({ length: maxValue + 1 }, () => 0);
+  values.forEach((value, index) => {
+    counts[value] += 1;
+    events.push({
+      type: "sortCompare",
+      indices: [index, index],
+      message: `Count value ${value}; bucket ${value} now holds ${counts[value]}.`,
+    });
+  });
+
+  let writeIndex = 0;
+  counts.forEach((count, bucket) => {
+    if (count === 0) {
+      return;
+    }
+
+    events.push({
+      type: "sortPartition",
+      range: [writeIndex, Math.max(0, values.length - 1)],
+      boundary: writeIndex,
+      scanner: writeIndex,
+      message: `Write ${count} occurrence(s) of value ${bucket}.`,
+    });
+
+    for (let copy = 0; copy < count; copy += 1) {
+      values[writeIndex] = bucket;
+      events.push({
+        type: "sortSwap",
+        indices: [writeIndex, writeIndex],
+        values: [...values],
+        message: `Place value ${bucket} at index ${writeIndex}.`,
+      });
+      events.push({
+        type: "sortMarkSorted",
+        indices: Array.from({ length: writeIndex + 1 }, (_, index) => index),
+        message: `Positions 0 through ${writeIndex} are reconstructed.`,
+      });
+      writeIndex += 1;
+    }
+  });
+
+  return {
+    algorithm: "countingSort",
+    initialState: { type: "array", values: initialValues },
+    finalState: { type: "array", values },
+    events,
+    metadata: {
+      algorithmName: "Counting Sort",
       category: "Sorting",
       inputSize: values.length,
       eventCount: events.length,

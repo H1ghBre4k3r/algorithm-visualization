@@ -34,6 +34,7 @@ Reference: https://impeccable.style
   - Insertion boundary: violet range wash.
   - Selection minimum candidate: violet range wash with amber comparisons.
   - Shell gap pass: violet range wash with amber gapped comparisons.
+  - Counting rebuild: violet write range with green reconstructed prefix.
   - Bubble pass fixed tail: green.
   - Merge range: violet range wash with amber comparisons.
   - Heap range: violet range wash with green fixed tail.

@@ -86,6 +86,13 @@ export const algorithms: AlgorithmCatalogItem[] = [
     summary: "Sort distant subsequences, then tighten the gap to finish.",
   },
   {
+    id: "countingSort",
+    label: "Counting Sort",
+    category: "sorting",
+    status: "available",
+    summary: "Count integer buckets, then rebuild the array in order.",
+  },
+  {
     id: "mergesort",
     label: "Mergesort",
     category: "sorting",

@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { parseEditDistanceInput, parseGraphInput, parseKmpInput, parseSortInput } from "./validators";
+import {
+  parseCustomInput,
+  parseEditDistanceInput,
+  parseGraphInput,
+  parseKmpInput,
+  parseSortInput,
+} from "./validators";
 
 describe("parseSortInput", () => {
   it("accepts a raw array", () => {
@@ -13,6 +19,13 @@ describe("parseSortInput", () => {
 
   it("rejects non-integer values", () => {
     expect(() => parseSortInput("[1, 2.5]")).toThrow("integer");
+  });
+
+  it("routes counting sort custom input through the sort parser", () => {
+    expect(parseCustomInput("countingSort", '{"values":[4,0,2]}')).toEqual({
+      type: "sort",
+      value: { values: [4, 0, 2] },
+    });
   });
 });
 
