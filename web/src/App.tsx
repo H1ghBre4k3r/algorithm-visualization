@@ -59,6 +59,7 @@ export default function App() {
     dfs: customTemplate("dfs"),
     dijkstra: customTemplate("dijkstra"),
     bellmanFord: customTemplate("bellmanFord"),
+    aStar: customTemplate("aStar"),
     primMst: customTemplate("primMst"),
     kruskal: customTemplate("kruskal"),
     kmp: customTemplate("kmp"),
@@ -499,6 +500,9 @@ function optionsForAlgorithm(algorithm: AvailableAlgorithmId): AlgorithmRequest[
   if (algorithm === "bellmanFord") {
     return { type: "bellmanFord", value: {} };
   }
+  if (algorithm === "aStar") {
+    return { type: "aStar", value: { stopAtTarget: true } };
+  }
   return { type: "dijkstra", value: { stopAtTarget: true } };
 }
 
@@ -524,6 +528,7 @@ function isGraphAlgorithm(algorithm: AvailableAlgorithmId) {
     algorithm === "dfs" ||
     algorithm === "dijkstra" ||
     algorithm === "bellmanFord" ||
+    algorithm === "aStar" ||
     algorithm === "primMst" ||
     algorithm === "kruskal"
   );

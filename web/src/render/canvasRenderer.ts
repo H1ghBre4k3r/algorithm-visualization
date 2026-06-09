@@ -53,6 +53,7 @@ export function drawTrace(canvas: HTMLCanvasElement, trace: Trace, step: number)
       trace.algorithm === "dfs" ||
       trace.algorithm === "dijkstra" ||
       trace.algorithm === "bellmanFord" ||
+      trace.algorithm === "aStar" ||
       trace.algorithm === "primMst" ||
       trace.algorithm === "kruskal") &&
     trace.initialState.type === "graph"

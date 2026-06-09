@@ -112,6 +112,8 @@ export function exampleRequest(algorithm: AvailableAlgorithmId): AlgorithmReques
     options:
       algorithm === "bellmanFord"
         ? { type: "bellmanFord", value: {} }
+        : algorithm === "aStar"
+          ? { type: "aStar", value: { stopAtTarget: true } }
         : { type: "dijkstra", value: { stopAtTarget: true } },
   };
 }

@@ -15,6 +15,7 @@ pub enum AlgorithmId {
     Dfs,
     Dijkstra,
     BellmanFord,
+    AStar,
     PrimMst,
     Kruskal,
     Kmp,
@@ -59,6 +60,7 @@ pub enum AlgorithmOptions {
     Dfs(DfsOptions),
     Dijkstra(DijkstraOptions),
     BellmanFord(BellmanFordOptions),
+    AStar(AStarOptions),
     PrimMst(PrimMstOptions),
     Kruskal(KruskalOptions),
     Kmp(KmpOptions),
@@ -116,6 +118,17 @@ pub struct DijkstraOptions {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct BellmanFordOptions {}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AStarOptions {
+    #[serde(default = "default_true")]
+    pub stop_at_target: bool,
+}
+
+fn default_true() -> bool {
+    true
+}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
@@ -403,6 +416,13 @@ pub fn generate_trace(request: AlgorithmRequest) -> Result<Trace, AlgorithmError
             trace_dijkstra(input, stop_at_target)
         }
         (AlgorithmId::BellmanFord, InputData::Graph(input)) => trace_bellman_ford(input),
+        (AlgorithmId::AStar, InputData::Graph(input)) => {
+            let stop_at_target = match request.options {
+                Some(AlgorithmOptions::AStar(options)) => options.stop_at_target,
+                _ => true,
+            };
+            trace_a_star(input, stop_at_target)
+        }
         (AlgorithmId::PrimMst, InputData::Graph(input)) => trace_prim_mst(input),
         (AlgorithmId::Kruskal, InputData::Graph(input)) => trace_kruskal(input),
         (AlgorithmId::Kmp, InputData::Sequence(input)) => trace_kmp(input),
@@ -433,6 +453,9 @@ pub fn generate_trace(request: AlgorithmRequest) -> Result<Trace, AlgorithmError
         )),
         (AlgorithmId::BellmanFord, _) => Err(AlgorithmError::new(
             "Bellman-Ford requires graph input with nodes, edges, source, and target.",
+        )),
+        (AlgorithmId::AStar, _) => Err(AlgorithmError::new(
+            "A* requires graph input with nodes, edges, source, and target.",
         )),
         (AlgorithmId::PrimMst, _) => Err(AlgorithmError::new(
             "Prim MST requires undirected graph input with nodes and weighted edges.",
@@ -524,6 +547,14 @@ pub fn example_request(algorithm: AlgorithmId) -> AlgorithmRequest {
             input_mode: InputMode::Example,
             input: InputData::Graph(example_graph()),
             options: Some(AlgorithmOptions::BellmanFord(BellmanFordOptions::default())),
+        },
+        AlgorithmId::AStar => AlgorithmRequest {
+            algorithm,
+            input_mode: InputMode::Example,
+            input: InputData::Graph(example_graph()),
+            options: Some(AlgorithmOptions::AStar(AStarOptions {
+                stop_at_target: true,
+            })),
         },
         AlgorithmId::PrimMst => AlgorithmRequest {
             algorithm,
@@ -1700,6 +1731,196 @@ pub fn trace_bellman_ford(input: GraphInput) -> Result<Trace, AlgorithmError> {
     })
 }
 
+pub fn trace_a_star(input: GraphInput, stop_at_target: bool) -> Result<Trace, AlgorithmError> {
+    validate_graph(&input)?;
+
+    let node_order = input
+        .nodes
+        .iter()
+        .map(|node| node.id.clone())
+        .collect::<Vec<_>>();
+    let positions = input
+        .nodes
+        .iter()
+        .map(|node| (node.id.clone(), (node.x, node.y)))
+        .collect::<HashMap<_, _>>();
+    let min_positive_weight = input
+        .edges
+        .iter()
+        .filter(|edge| edge.weight > 0)
+        .map(|edge| edge.weight)
+        .min();
+    let initial_distances = node_order
+        .iter()
+        .map(|node| NodeDistance {
+            node: node.clone(),
+            distance: if *node == input.source { Some(0) } else { None },
+        })
+        .collect();
+
+    let mut distances: HashMap<String, Option<u32>> =
+        node_order.iter().map(|node| (node.clone(), None)).collect();
+    distances.insert(input.source.clone(), Some(0));
+    let mut previous: HashMap<String, String> = HashMap::new();
+    let adjacency = build_adjacency(&input.edges);
+    let mut open = HashSet::from([input.source.clone()]);
+    let mut settled = HashSet::new();
+    let mut events = Vec::new();
+
+    while !open.is_empty() {
+        let current = node_order
+            .iter()
+            .filter(|node| open.contains(*node))
+            .filter_map(|node| {
+                let distance = distances.get(node).copied().flatten()?;
+                let heuristic = graph_heuristic(
+                    node,
+                    input.target.as_deref(),
+                    &positions,
+                    min_positive_weight,
+                );
+                Some((
+                    node.clone(),
+                    distance,
+                    distance.saturating_add(heuristic),
+                    heuristic,
+                ))
+            })
+            .min_by_key(|(_, distance, estimate, heuristic)| (*estimate, *heuristic, *distance));
+
+        let Some((node, distance, estimate, heuristic)) = current else {
+            break;
+        };
+
+        open.remove(&node);
+        events.push(TraceEvent::GraphVisit {
+            node: node.clone(),
+            distance,
+            message: format!(
+                "Expand {node} with distance {distance} and estimated total {estimate}."
+            ),
+        });
+
+        if let Some(edges) = adjacency.get(&node) {
+            for edge in edges {
+                let previous_distance = distances.get(&edge.to).copied().flatten();
+                let candidate = distance.saturating_add(edge.weight);
+                let improved = previous_distance.map_or(true, |existing| candidate < existing);
+
+                if improved {
+                    distances.insert(edge.to.clone(), Some(candidate));
+                    previous.insert(edge.to.clone(), node.clone());
+                    if !settled.contains(&edge.to) {
+                        open.insert(edge.to.clone());
+                    }
+                }
+
+                events.push(TraceEvent::GraphRelaxEdge {
+                    edge_id: edge.edge_id.clone(),
+                    from: node.clone(),
+                    to: edge.to.clone(),
+                    weight: edge.weight,
+                    previous_distance,
+                    new_distance: if improved {
+                        Some(candidate)
+                    } else {
+                        previous_distance
+                    },
+                    improved,
+                    message: if improved {
+                        let next_heuristic = graph_heuristic(
+                            &edge.to,
+                            input.target.as_deref(),
+                            &positions,
+                            min_positive_weight,
+                        );
+                        format!(
+                            "Update {} to distance {candidate}; estimated total {}.",
+                            edge.to,
+                            candidate.saturating_add(next_heuristic)
+                        )
+                    } else {
+                        format!("Keep {} at its current best distance.", edge.to)
+                    },
+                });
+            }
+        }
+
+        settled.insert(node.clone());
+        events.push(TraceEvent::GraphSettle {
+            node: node.clone(),
+            distance,
+            message: if heuristic == 0 {
+                format!("Settle node {node}.")
+            } else {
+                format!("Settle node {node}; heuristic contribution was {heuristic}.")
+            },
+        });
+
+        if stop_at_target && input.target.as_ref() == Some(&node) {
+            break;
+        }
+    }
+
+    let (path, total_distance) = input
+        .target
+        .as_ref()
+        .map(|target| reconstruct_path(&input.source, target, &previous, &distances))
+        .unwrap_or_default();
+
+    if input.target.is_some() {
+        events.push(TraceEvent::GraphPath {
+            nodes: path.clone(),
+            total_distance,
+            message: match total_distance {
+                Some(distance) => format!("A* path has total distance {distance}."),
+                None => "No path reaches the selected target.".to_string(),
+            },
+        });
+    }
+
+    let final_distances = node_order
+        .iter()
+        .map(|node| NodeDistance {
+            node: node.clone(),
+            distance: distances.get(node).copied().flatten(),
+        })
+        .collect::<Vec<_>>();
+
+    let metadata = TraceMetadata {
+        algorithm_name: "A* Search".to_string(),
+        category: "Graph".to_string(),
+        input_size: input.nodes.len(),
+        event_count: events.len(),
+        result_summary: match total_distance {
+            Some(distance) => format!("A* path distance is {distance}."),
+            None => "No reachable target path found.".to_string(),
+        },
+    };
+
+    Ok(Trace {
+        algorithm: AlgorithmId::AStar,
+        initial_state: VisualizationState::Graph {
+            nodes: input.nodes.clone(),
+            edges: input.edges.clone(),
+            source: input.source.clone(),
+            target: input.target.clone(),
+            distances: initial_distances,
+            path: Vec::new(),
+        },
+        final_state: VisualizationState::Graph {
+            nodes: input.nodes,
+            edges: input.edges,
+            source: input.source,
+            target: input.target,
+            distances: final_distances,
+            path,
+        },
+        events,
+        metadata,
+    })
+}
+
 pub fn trace_prim_mst(input: GraphInput) -> Result<Trace, AlgorithmError> {
     validate_graph(&input)?;
     validate_mst_graph(&input)?;
@@ -2265,6 +2486,27 @@ fn build_adjacency(edges: &[GraphEdge]) -> HashMap<String, Vec<AdjacencyEdge>> {
     adjacency
 }
 
+fn graph_heuristic(
+    node: &str,
+    target: Option<&str>,
+    positions: &HashMap<String, (f32, f32)>,
+    min_positive_weight: Option<u32>,
+) -> u32 {
+    let Some(target) = target else {
+        return 0;
+    };
+    let Some(min_positive_weight) = min_positive_weight else {
+        return 0;
+    };
+    let (Some((x1, y1)), Some((x2, y2))) = (positions.get(node), positions.get(target)) else {
+        return 0;
+    };
+
+    let dx = x1 - x2;
+    let dy = y1 - y2;
+    ((dx * dx + dy * dy).sqrt() * min_positive_weight as f32).floor() as u32
+}
+
 fn validate_graph(input: &GraphInput) -> Result<(), AlgorithmError> {
     if input.nodes.is_empty() {
         return Err(AlgorithmError::new("Graph input needs at least one node."));
@@ -2762,6 +3004,36 @@ mod tests {
     }
 
     #[test]
+    fn a_star_trace_finds_shortest_path() {
+        let trace = trace_a_star(example_graph(), true).expect("trace");
+
+        let path = trace.events.iter().find_map(|event| match event {
+            TraceEvent::GraphPath {
+                nodes,
+                total_distance,
+                ..
+            } => Some((nodes.clone(), *total_distance)),
+            _ => None,
+        });
+
+        assert_eq!(
+            path,
+            Some((
+                vec![
+                    "A".to_string(),
+                    "C".to_string(),
+                    "B".to_string(),
+                    "D".to_string(),
+                    "E".to_string(),
+                    "F".to_string()
+                ],
+                Some(13)
+            ))
+        );
+        assert_valid_graph_trace(&trace);
+    }
+
+    #[test]
     fn dijkstra_rejects_edges_with_unknown_nodes() {
         let mut graph = example_graph();
         graph.edges.push(GraphEdge {
@@ -2925,6 +3197,7 @@ mod tests {
             AlgorithmId::Dfs,
             AlgorithmId::Dijkstra,
             AlgorithmId::BellmanFord,
+            AlgorithmId::AStar,
             AlgorithmId::PrimMst,
             AlgorithmId::Kruskal,
             AlgorithmId::Kmp,
@@ -2941,6 +3214,7 @@ mod tests {
                 | AlgorithmId::Dfs
                 | AlgorithmId::Dijkstra
                 | AlgorithmId::BellmanFord
+                | AlgorithmId::AStar
                 | AlgorithmId::PrimMst
                 | AlgorithmId::Kruskal => assert_valid_graph_trace(&trace),
                 AlgorithmId::Kmp | AlgorithmId::Levenshtein => assert_valid_sequence_trace(&trace),
@@ -3020,6 +3294,7 @@ mod tests {
                 | AlgorithmId::Dfs
                 | AlgorithmId::Dijkstra
                 | AlgorithmId::BellmanFord
+                | AlgorithmId::AStar
                 | AlgorithmId::PrimMst
                 | AlgorithmId::Kruskal
         ));

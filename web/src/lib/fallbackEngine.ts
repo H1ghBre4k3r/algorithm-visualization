@@ -40,6 +40,11 @@ export function generateTraceFallback(request: AlgorithmRequest): Trace {
     return traceBellmanFord(request.input.value);
   }
 
+  if (request.algorithm === "aStar" && request.input.type === "graph") {
+    const stopAtTarget = request.options?.type === "aStar" ? request.options.value.stopAtTarget : true;
+    return traceAStar(request.input.value, stopAtTarget);
+  }
+
   if (request.algorithm === "bfs" && request.input.type === "graph") {
     const stopAtTarget = request.options?.type === "bfs" ? request.options.value.stopAtTarget : true;
     return traceBfs(request.input.value, stopAtTarget);
@@ -1110,6 +1115,139 @@ function traceBellmanFord(input: GraphInput): Trace {
   };
 }
 
+function traceAStar(input: GraphInput, stopAtTarget: boolean): Trace {
+  validateGraph(input);
+
+  const nodeOrder = input.nodes.map((node) => node.id);
+  const positions = new Map(input.nodes.map((node) => [node.id, { x: node.x, y: node.y }]));
+  const positiveWeights = input.edges.map((edge) => edge.weight).filter((weight) => weight > 0);
+  const minPositiveWeight = positiveWeights.length > 0 ? Math.min(...positiveWeights) : null;
+  const distances = new Map<string, number | null>(nodeOrder.map((node) => [node, null]));
+  const previous = new Map<string, string>();
+  const adjacency = buildAdjacency(input.edges);
+  const open = new Set<string>([input.source]);
+  const settled = new Set<string>();
+  const events: TraceEvent[] = [];
+  distances.set(input.source, 0);
+
+  while (open.size > 0) {
+    const current = pickLowestEstimate(nodeOrder, open, distances, input.target ?? null, positions, minPositiveWeight);
+    if (!current) {
+      break;
+    }
+
+    open.delete(current.node);
+    events.push({
+      type: "graphVisit",
+      node: current.node,
+      distance: current.distance,
+      message: `Expand ${current.node} with distance ${current.distance} and estimated total ${current.estimate}.`,
+    });
+
+    for (const edge of adjacency.get(current.node) ?? []) {
+      const previousDistance = distances.get(edge.to) ?? null;
+      const candidate = current.distance + edge.weight;
+      const improved = previousDistance === null || candidate < previousDistance;
+
+      if (improved) {
+        distances.set(edge.to, candidate);
+        previous.set(edge.to, current.node);
+        if (!settled.has(edge.to)) {
+          open.add(edge.to);
+        }
+      }
+
+      const nextHeuristic = graphHeuristic(edge.to, input.target ?? null, positions, minPositiveWeight);
+      events.push({
+        type: "graphRelaxEdge",
+        edgeId: edge.edgeId,
+        from: current.node,
+        to: edge.to,
+        weight: edge.weight,
+        previousDistance,
+        newDistance: improved ? candidate : previousDistance,
+        improved,
+        message: improved
+          ? `Update ${edge.to} to distance ${candidate}; estimated total ${candidate + nextHeuristic}.`
+          : `Keep ${edge.to} at its current best distance.`,
+      });
+    }
+
+    settled.add(current.node);
+    events.push({
+      type: "graphSettle",
+      node: current.node,
+      distance: current.distance,
+      message:
+        current.heuristic === 0
+          ? `Settle node ${current.node}.`
+          : `Settle node ${current.node}; heuristic contribution was ${current.heuristic}.`,
+    });
+
+    if (stopAtTarget && input.target === current.node) {
+      break;
+    }
+  }
+
+  const [path, totalDistance] = input.target
+    ? reconstructPath(input.source, input.target, previous, distances)
+    : [[], null];
+
+  if (input.target) {
+    events.push({
+      type: "graphPath",
+      nodes: path,
+      totalDistance,
+      message:
+        totalDistance === null
+          ? "No path reaches the selected target."
+          : `A* path has total distance ${totalDistance}.`,
+    });
+  }
+
+  const initialDistances = nodeOrder.map<NodeDistance>((node) => ({
+    node,
+    distance: node === input.source ? 0 : null,
+  }));
+  const finalDistances = nodeOrder.map<NodeDistance>((node) => ({
+    node,
+    distance: distances.get(node) ?? null,
+  }));
+
+  return {
+    algorithm: "aStar",
+    initialState: {
+      type: "graph",
+      nodes: input.nodes,
+      edges: input.edges,
+      source: input.source,
+      target: input.target ?? null,
+      distances: initialDistances,
+      path: [],
+    },
+    finalState: {
+      type: "graph",
+      nodes: input.nodes,
+      edges: input.edges,
+      source: input.source,
+      target: input.target ?? null,
+      distances: finalDistances,
+      path,
+    },
+    events,
+    metadata: {
+      algorithmName: "A* Search",
+      category: "Graph",
+      inputSize: input.nodes.length,
+      eventCount: events.length,
+      resultSummary:
+        totalDistance === null
+          ? "No reachable target path found."
+          : `A* path distance is ${totalDistance}.`,
+    },
+  };
+}
+
 function tracePrimMst(input: GraphInput): Trace {
   validateGraph(input);
   validateMstGraph(input);
@@ -1592,6 +1730,62 @@ function pickNearestUnvisited(
   }
 
   return best;
+}
+
+function pickLowestEstimate(
+  nodeOrder: string[],
+  open: Set<string>,
+  distances: Map<string, number | null>,
+  target: string | null,
+  positions: Map<string, { x: number; y: number }>,
+  minPositiveWeight: number | null,
+) {
+  let best: { node: string; distance: number; estimate: number; heuristic: number } | null = null;
+
+  for (const node of nodeOrder) {
+    if (!open.has(node)) {
+      continue;
+    }
+
+    const distance = distances.get(node);
+    if (distance === null || distance === undefined) {
+      continue;
+    }
+
+    const heuristic = graphHeuristic(node, target, positions, minPositiveWeight);
+    const estimate = distance + heuristic;
+    if (
+      !best ||
+      estimate < best.estimate ||
+      (estimate === best.estimate &&
+        (heuristic < best.heuristic || (heuristic === best.heuristic && distance < best.distance)))
+    ) {
+      best = { node, distance, estimate, heuristic };
+    }
+  }
+
+  return best;
+}
+
+function graphHeuristic(
+  node: string,
+  target: string | null,
+  positions: Map<string, { x: number; y: number }>,
+  minPositiveWeight: number | null,
+) {
+  if (!target || minPositiveWeight === null) {
+    return 0;
+  }
+
+  const current = positions.get(node);
+  const destination = positions.get(target);
+  if (!current || !destination) {
+    return 0;
+  }
+
+  const dx = current.x - destination.x;
+  const dy = current.y - destination.y;
+  return Math.floor(Math.hypot(dx, dy) * minPositiveWeight);
 }
 
 function reconstructPath(

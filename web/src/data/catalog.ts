@@ -114,6 +114,13 @@ export const algorithms: AlgorithmCatalogItem[] = [
     summary: "Repeat edge relaxations to reveal shortest path distances.",
   },
   {
+    id: "aStar",
+    label: "A* Search",
+    category: "graph",
+    status: "available",
+    summary: "Guide weighted pathfinding with a coordinate heuristic.",
+  },
+  {
     id: "primMst",
     label: "Prim MST",
     category: "graph",
