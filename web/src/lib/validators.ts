@@ -23,6 +23,7 @@ export function parseCustomInput(algorithm: AvailableAlgorithmId, raw: string): 
     algorithm === "cocktailShakerSort" ||
     algorithm === "oddEvenSort" ||
     algorithm === "pancakeSort" ||
+    algorithm === "quickselect" ||
     algorithm === "selectionSort" ||
     algorithm === "shellSort" ||
     algorithm === "countingSort" ||
@@ -46,7 +47,8 @@ export function parseCustomInput(algorithm: AvailableAlgorithmId, raw: string): 
 
 export function parseSortInput(raw: string): SortInput {
   const parsed = parseJson(raw);
-  const values = Array.isArray(parsed) ? parsed : readRecord(parsed).values;
+  const record = Array.isArray(parsed) ? null : readRecord(parsed);
+  const values = Array.isArray(parsed) ? parsed : record?.values;
 
   if (!Array.isArray(values)) {
     throw new InputValidationError("Sort input must be an array or an object with a values array.");
@@ -55,14 +57,28 @@ export function parseSortInput(raw: string): SortInput {
     throw new InputValidationError("Sorting visualizations support up to 128 values.");
   }
 
-  return {
-    values: values.map((value, index) => {
-      if (!Number.isFinite(value) || !Number.isInteger(value)) {
-        throw new InputValidationError(`Value at index ${index} must be an integer.`);
-      }
-      return value;
-    }),
-  };
+  const mappedValues = values.map((value, index) => {
+    if (!Number.isFinite(value) || !Number.isInteger(value)) {
+      throw new InputValidationError(`Value at index ${index} must be an integer.`);
+    }
+    return value;
+  });
+
+  const targetIndex = record?.targetIndex;
+  if (targetIndex === undefined) {
+    return { values: mappedValues };
+  }
+  if (
+    typeof targetIndex !== "number" ||
+    !Number.isFinite(targetIndex) ||
+    !Number.isInteger(targetIndex) ||
+    targetIndex < 0 ||
+    targetIndex >= mappedValues.length
+  ) {
+    throw new InputValidationError("targetIndex must be an integer inside the values array.");
+  }
+
+  return { values: mappedValues, targetIndex };
 }
 
 export function parseGraphInput(raw: string): GraphInput {

@@ -12,6 +12,7 @@ pub enum AlgorithmId {
     CocktailShakerSort,
     OddEvenSort,
     PancakeSort,
+    Quickselect,
     SelectionSort,
     ShellSort,
     CountingSort,
@@ -67,6 +68,7 @@ pub enum AlgorithmOptions {
     CocktailShakerSort(CocktailShakerSortOptions),
     OddEvenSort(OddEvenSortOptions),
     PancakeSort(PancakeSortOptions),
+    Quickselect(QuickselectOptions),
     SelectionSort(SelectionSortOptions),
     ShellSort(ShellSortOptions),
     CountingSort(CountingSortOptions),
@@ -117,6 +119,10 @@ pub struct OddEvenSortOptions {}
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct PancakeSortOptions {}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct QuickselectOptions {}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
@@ -210,6 +216,8 @@ pub struct LevenshteinOptions {}
 #[serde(rename_all = "camelCase")]
 pub struct SortInput {
     pub values: Vec<i32>,
+    #[serde(default)]
+    pub target_index: Option<usize>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -457,6 +465,7 @@ pub fn generate_trace(request: AlgorithmRequest) -> Result<Trace, AlgorithmError
         }
         (AlgorithmId::OddEvenSort, InputData::Sort(input)) => trace_odd_even_sort(input),
         (AlgorithmId::PancakeSort, InputData::Sort(input)) => trace_pancake_sort(input),
+        (AlgorithmId::Quickselect, InputData::Sort(input)) => trace_quickselect(input),
         (AlgorithmId::SelectionSort, InputData::Sort(input)) => trace_selection_sort(input),
         (AlgorithmId::ShellSort, InputData::Sort(input)) => trace_shell_sort(input),
         (AlgorithmId::CountingSort, InputData::Sort(input)) => trace_counting_sort(input),
@@ -516,6 +525,9 @@ pub fn generate_trace(request: AlgorithmRequest) -> Result<Trace, AlgorithmError
         )),
         (AlgorithmId::PancakeSort, _) => Err(AlgorithmError::new(
             "Pancake Sort requires sort input with a values array.",
+        )),
+        (AlgorithmId::Quickselect, _) => Err(AlgorithmError::new(
+            "Quickselect requires sort input with a values array and optional targetIndex.",
         )),
         (AlgorithmId::SelectionSort, _) => Err(AlgorithmError::new(
             "Selection Sort requires sort input with a values array.",
@@ -581,6 +593,7 @@ pub fn example_request(algorithm: AlgorithmId) -> AlgorithmRequest {
             input_mode: InputMode::Example,
             input: InputData::Sort(SortInput {
                 values: vec![42, 12, 77, 18, 93, 31, 64, 5, 56, 29],
+                target_index: None,
             }),
             options: Some(AlgorithmOptions::Quicksort(QuicksortOptions {
                 pivot_strategy: default_pivot_strategy(),
@@ -591,6 +604,7 @@ pub fn example_request(algorithm: AlgorithmId) -> AlgorithmRequest {
             input_mode: InputMode::Example,
             input: InputData::Sort(SortInput {
                 values: vec![42, 12, 77, 18, 93, 31, 64, 5, 56, 29],
+                target_index: None,
             }),
             options: Some(AlgorithmOptions::InsertionSort(
                 InsertionSortOptions::default(),
@@ -601,6 +615,7 @@ pub fn example_request(algorithm: AlgorithmId) -> AlgorithmRequest {
             input_mode: InputMode::Example,
             input: InputData::Sort(SortInput {
                 values: vec![42, 12, 77, 18, 93, 31, 64, 5, 56, 29],
+                target_index: None,
             }),
             options: Some(AlgorithmOptions::BubbleSort(BubbleSortOptions::default())),
         },
@@ -609,6 +624,7 @@ pub fn example_request(algorithm: AlgorithmId) -> AlgorithmRequest {
             input_mode: InputMode::Example,
             input: InputData::Sort(SortInput {
                 values: vec![42, 12, 77, 18, 93, 31, 64, 5, 56, 29],
+                target_index: None,
             }),
             options: Some(AlgorithmOptions::CocktailShakerSort(
                 CocktailShakerSortOptions::default(),
@@ -619,6 +635,7 @@ pub fn example_request(algorithm: AlgorithmId) -> AlgorithmRequest {
             input_mode: InputMode::Example,
             input: InputData::Sort(SortInput {
                 values: vec![42, 12, 77, 18, 93, 31, 64, 5, 56, 29],
+                target_index: None,
             }),
             options: Some(AlgorithmOptions::OddEvenSort(OddEvenSortOptions::default())),
         },
@@ -627,14 +644,25 @@ pub fn example_request(algorithm: AlgorithmId) -> AlgorithmRequest {
             input_mode: InputMode::Example,
             input: InputData::Sort(SortInput {
                 values: vec![42, 12, 77, 18, 93, 31, 64, 5, 56, 29],
+                target_index: None,
             }),
             options: Some(AlgorithmOptions::PancakeSort(PancakeSortOptions::default())),
+        },
+        AlgorithmId::Quickselect => AlgorithmRequest {
+            algorithm,
+            input_mode: InputMode::Example,
+            input: InputData::Sort(SortInput {
+                values: vec![42, 12, 77, 18, 93, 31, 64, 5, 56, 29],
+                target_index: Some(4),
+            }),
+            options: Some(AlgorithmOptions::Quickselect(QuickselectOptions::default())),
         },
         AlgorithmId::SelectionSort => AlgorithmRequest {
             algorithm,
             input_mode: InputMode::Example,
             input: InputData::Sort(SortInput {
                 values: vec![42, 12, 77, 18, 93, 31, 64, 5, 56, 29],
+                target_index: None,
             }),
             options: Some(AlgorithmOptions::SelectionSort(
                 SelectionSortOptions::default(),
@@ -645,6 +673,7 @@ pub fn example_request(algorithm: AlgorithmId) -> AlgorithmRequest {
             input_mode: InputMode::Example,
             input: InputData::Sort(SortInput {
                 values: vec![42, 12, 77, 18, 93, 31, 64, 5, 56, 29],
+                target_index: None,
             }),
             options: Some(AlgorithmOptions::ShellSort(ShellSortOptions::default())),
         },
@@ -653,6 +682,7 @@ pub fn example_request(algorithm: AlgorithmId) -> AlgorithmRequest {
             input_mode: InputMode::Example,
             input: InputData::Sort(SortInput {
                 values: vec![42, 12, 77, 18, 93, 31, 64, 5, 56, 29],
+                target_index: None,
             }),
             options: Some(AlgorithmOptions::CountingSort(
                 CountingSortOptions::default(),
@@ -663,6 +693,7 @@ pub fn example_request(algorithm: AlgorithmId) -> AlgorithmRequest {
             input_mode: InputMode::Example,
             input: InputData::Sort(SortInput {
                 values: vec![42, 12, 77, 18, 93, 31, 64, 5, 56, 29],
+                target_index: None,
             }),
             options: Some(AlgorithmOptions::RadixSort(RadixSortOptions::default())),
         },
@@ -671,6 +702,7 @@ pub fn example_request(algorithm: AlgorithmId) -> AlgorithmRequest {
             input_mode: InputMode::Example,
             input: InputData::Sort(SortInput {
                 values: vec![42, 12, 77, 18, 93, 31, 64, 5, 56, 29],
+                target_index: None,
             }),
             options: Some(AlgorithmOptions::BucketSort(BucketSortOptions::default())),
         },
@@ -679,6 +711,7 @@ pub fn example_request(algorithm: AlgorithmId) -> AlgorithmRequest {
             input_mode: InputMode::Example,
             input: InputData::Sort(SortInput {
                 values: vec![42, 12, 77, 18, 93, 31, 64, 5, 56, 29],
+                target_index: None,
             }),
             options: Some(AlgorithmOptions::CombSort(CombSortOptions::default())),
         },
@@ -687,6 +720,7 @@ pub fn example_request(algorithm: AlgorithmId) -> AlgorithmRequest {
             input_mode: InputMode::Example,
             input: InputData::Sort(SortInput {
                 values: vec![42, 12, 77, 18, 93, 31, 64, 5, 56, 29],
+                target_index: None,
             }),
             options: Some(AlgorithmOptions::Mergesort(MergesortOptions::default())),
         },
@@ -695,6 +729,7 @@ pub fn example_request(algorithm: AlgorithmId) -> AlgorithmRequest {
             input_mode: InputMode::Example,
             input: InputData::Sort(SortInput {
                 values: vec![42, 12, 77, 18, 93, 31, 64, 5, 56, 29],
+                target_index: None,
             }),
             options: Some(AlgorithmOptions::Timsort(TimsortOptions::default())),
         },
@@ -703,6 +738,7 @@ pub fn example_request(algorithm: AlgorithmId) -> AlgorithmRequest {
             input_mode: InputMode::Example,
             input: InputData::Sort(SortInput {
                 values: vec![42, 12, 77, 18, 93, 31, 64, 5, 56, 29],
+                target_index: None,
             }),
             options: Some(AlgorithmOptions::HeapSort(HeapSortOptions::default())),
         },
@@ -807,6 +843,103 @@ pub fn trace_quicksort(input: SortInput) -> Result<Trace, AlgorithmError> {
 
     Ok(Trace {
         algorithm: AlgorithmId::Quicksort,
+        initial_state: VisualizationState::Array {
+            values: initial_values,
+        },
+        final_state: VisualizationState::Array { values },
+        events,
+        metadata,
+    })
+}
+
+pub fn trace_quickselect(input: SortInput) -> Result<Trace, AlgorithmError> {
+    if input.values.len() > 128 {
+        return Err(AlgorithmError::new(
+            "Quickselect input is capped at 128 values for interactive playback.",
+        ));
+    }
+    if input.values.is_empty() {
+        return Err(AlgorithmError::new(
+            "Quickselect requires at least one value to select from.",
+        ));
+    }
+
+    let target_index = input.target_index.unwrap_or(input.values.len() / 2);
+    if target_index >= input.values.len() {
+        return Err(AlgorithmError::new(format!(
+            "Quickselect targetIndex {target_index} is outside the values array."
+        )));
+    }
+
+    let initial_values = input.values.clone();
+    let mut values = input.values;
+    let mut events = Vec::new();
+    let mut low = 0usize;
+    let mut high = values.len() - 1;
+
+    loop {
+        events.push(TraceEvent::SortPartition {
+            range: [low, high],
+            boundary: target_index,
+            scanner: low,
+            message: format!("Search range {low}..{high} for index {target_index}."),
+        });
+
+        let pivot_index = high;
+        let pivot_value = values[pivot_index];
+        events.push(TraceEvent::SortPivot {
+            index: pivot_index,
+            value: pivot_value,
+            range: [low, high],
+            message: format!("Choose {pivot_value} at index {pivot_index} as the pivot."),
+        });
+
+        let pivot_final = quickselect_partition(&mut values, low, high, &mut events);
+
+        if pivot_final == target_index {
+            events.push(TraceEvent::SortMarkSorted {
+                indices: vec![target_index],
+                message: format!(
+                    "Index {target_index} now holds the selected value {}.",
+                    values[target_index]
+                ),
+            });
+            break;
+        }
+
+        if target_index < pivot_final {
+            if pivot_final == 0 {
+                break;
+            }
+            high = pivot_final - 1;
+            events.push(TraceEvent::SortPartition {
+                range: [low, high],
+                boundary: target_index,
+                scanner: low,
+                message: format!("Target is left of pivot; keep range {low}..{high}."),
+            });
+        } else {
+            low = pivot_final + 1;
+            events.push(TraceEvent::SortPartition {
+                range: [low, high],
+                boundary: target_index,
+                scanner: low,
+                message: format!("Target is right of pivot; keep range {low}..{high}."),
+            });
+        }
+    }
+
+    let selected_value = values[target_index];
+    let metadata = TraceMetadata {
+        algorithm_name: "Quickselect".to_string(),
+        category: "Sorting".to_string(),
+        input_size: values.len(),
+        event_count: events.len(),
+        result_summary: format!("Selected index {target_index}: {selected_value}."),
+    };
+
+    Ok(Trace {
+        algorithm: AlgorithmId::Quickselect,
         initial_state: VisualizationState::Array {
             values: initial_values,
         },
@@ -2399,6 +2532,60 @@ fn quicksort_range(values: &mut [i32], low: usize, high: usize, events: &mut Vec
             quicksort_range(values, right_low, high, events);
         }
     }
+}
+
+fn quickselect_partition(
+    values: &mut [i32],
+    low: usize,
+    high: usize,
+    events: &mut Vec<TraceEvent>,
+) -> usize {
+    let pivot_value = values[high];
+    let mut boundary = low;
+
+    for scanner in low..high {
+        events.push(TraceEvent::SortCompare {
+            indices: [scanner, high],
+            message: format!(
+                "Compare {} at index {scanner} with pivot {pivot_value}.",
+                values[scanner]
+            ),
+        });
+        events.push(TraceEvent::SortPartition {
+            range: [low, high],
+            boundary,
+            scanner,
+            message: format!("Partition boundary is at index {boundary}."),
+        });
+
+        if values[scanner] <= pivot_value {
+            if boundary != scanner {
+                values.swap(boundary, scanner);
+                events.push(TraceEvent::SortSwap {
+                    indices: [boundary, scanner],
+                    values: values.to_vec(),
+                    message: format!("Move {} into the lower partition.", values[boundary]),
+                });
+            }
+            boundary += 1;
+        }
+    }
+
+    if boundary != high {
+        values.swap(boundary, high);
+        events.push(TraceEvent::SortSwap {
+            indices: [boundary, high],
+            values: values.to_vec(),
+            message: format!("Place pivot {pivot_value} at index {boundary}."),
+        });
+    }
+
+    events.push(TraceEvent::SortMarkSorted {
+        indices: vec![boundary],
+        message: format!("Pivot {pivot_value} is fixed at index {boundary}."),
+    });
+
+    boundary
 }
 
 pub fn trace_bfs(input: GraphInput, stop_at_target: bool) -> Result<Trace, AlgorithmError> {
@@ -4020,6 +4207,7 @@ mod tests {
     fn quicksort_trace_sorts_values() {
         let trace = trace_quicksort(SortInput {
             values: vec![9, 3, 7, 1, 4],
+            target_index: None,
         })
         .expect("trace");
 
@@ -4040,7 +4228,11 @@ mod tests {
 
     #[test]
     fn quicksort_trace_handles_empty_input() {
-        let trace = trace_quicksort(SortInput { values: Vec::new() }).expect("trace");
+        let trace = trace_quicksort(SortInput {
+            values: Vec::new(),
+            target_index: None,
+        })
+        .expect("trace");
 
         assert!(trace.events.is_empty());
         assert_eq!(
@@ -4054,6 +4246,7 @@ mod tests {
     fn insertion_sort_trace_sorts_values() {
         let trace = trace_insertion_sort(SortInput {
             values: vec![9, 3, 7, 1, 4],
+            target_index: None,
         })
         .expect("trace");
 
@@ -4082,6 +4275,7 @@ mod tests {
     fn bubble_sort_trace_sorts_values() {
         let trace = trace_bubble_sort(SortInput {
             values: vec![9, 3, 7, 1, 4],
+            target_index: None,
         })
         .expect("trace");
 
@@ -4110,6 +4304,7 @@ mod tests {
     fn cocktail_shaker_sort_trace_sorts_values() {
         let trace = trace_cocktail_shaker_sort(SortInput {
             values: vec![9, 3, 7, 1, 4],
+            target_index: None,
         })
         .expect("trace");
 
@@ -4142,7 +4337,11 @@ mod tests {
 
     #[test]
     fn cocktail_shaker_sort_handles_empty_input() {
-        let trace = trace_cocktail_shaker_sort(SortInput { values: vec![] }).expect("trace");
+        let trace = trace_cocktail_shaker_sort(SortInput {
+            values: vec![],
+            target_index: None,
+        })
+        .expect("trace");
 
         assert_eq!(
             trace.final_state,
@@ -4156,6 +4355,7 @@ mod tests {
     fn odd_even_sort_trace_sorts_values() {
         let trace = trace_odd_even_sort(SortInput {
             values: vec![9, 3, 7, 1, 4],
+            target_index: None,
         })
         .expect("trace");
 
@@ -4188,7 +4388,11 @@ mod tests {
 
     #[test]
     fn odd_even_sort_handles_empty_input() {
-        let trace = trace_odd_even_sort(SortInput { values: vec![] }).expect("trace");
+        let trace = trace_odd_even_sort(SortInput {
+            values: vec![],
+            target_index: None,
+        })
+        .expect("trace");
 
         assert_eq!(
             trace.final_state,
@@ -4202,6 +4406,7 @@ mod tests {
     fn selection_sort_trace_sorts_values() {
         let trace = trace_selection_sort(SortInput {
             values: vec![9, 3, 7, 1, 4],
+            target_index: None,
         })
         .expect("trace");
 
@@ -4230,6 +4435,7 @@ mod tests {
     fn shell_sort_trace_sorts_values() {
         let trace = trace_shell_sort(SortInput {
             values: vec![9, 3, 7, 1, 4],
+            target_index: None,
         })
         .expect("trace");
 
@@ -4258,6 +4464,7 @@ mod tests {
     fn counting_sort_trace_sorts_values() {
         let trace = trace_counting_sort(SortInput {
             values: vec![9, 3, 7, 1, 4, 3],
+            target_index: None,
         })
         .expect("trace");
 
@@ -4286,6 +4493,7 @@ mod tests {
     fn counting_sort_rejects_negative_values() {
         let error = trace_counting_sort(SortInput {
             values: vec![3, -1, 2],
+            target_index: None,
         })
         .expect_err("invalid counting sort input");
 
@@ -4296,6 +4504,7 @@ mod tests {
     fn radix_sort_trace_sorts_values() {
         let trace = trace_radix_sort(SortInput {
             values: vec![90, 3, 17, 1, 40, 3],
+            target_index: None,
         })
         .expect("trace");
 
@@ -4322,7 +4531,11 @@ mod tests {
 
     #[test]
     fn radix_sort_handles_empty_input() {
-        let trace = trace_radix_sort(SortInput { values: vec![] }).expect("trace");
+        let trace = trace_radix_sort(SortInput {
+            values: vec![],
+            target_index: None,
+        })
+        .expect("trace");
 
         assert_eq!(
             trace.final_state,
@@ -4336,6 +4549,7 @@ mod tests {
     fn radix_sort_rejects_negative_values() {
         let error = trace_radix_sort(SortInput {
             values: vec![3, -1, 2],
+            target_index: None,
         })
         .expect_err("invalid radix sort input");
 
@@ -4346,6 +4560,7 @@ mod tests {
     fn bucket_sort_trace_sorts_values() {
         let trace = trace_bucket_sort(SortInput {
             values: vec![42, 3, 17, 1, 40, 3],
+            target_index: None,
         })
         .expect("trace");
 
@@ -4372,7 +4587,11 @@ mod tests {
 
     #[test]
     fn bucket_sort_handles_empty_input() {
-        let trace = trace_bucket_sort(SortInput { values: vec![] }).expect("trace");
+        let trace = trace_bucket_sort(SortInput {
+            values: vec![],
+            target_index: None,
+        })
+        .expect("trace");
 
         assert_eq!(
             trace.final_state,
@@ -4386,6 +4605,7 @@ mod tests {
     fn bucket_sort_rejects_negative_values() {
         let error = trace_bucket_sort(SortInput {
             values: vec![3, -1, 2],
+            target_index: None,
         })
         .expect_err("invalid bucket sort input");
 
@@ -4396,6 +4616,7 @@ mod tests {
     fn comb_sort_trace_sorts_values() {
         let trace = trace_comb_sort(SortInput {
             values: vec![9, 3, 7, 1, 4, 8],
+            target_index: None,
         })
         .expect("trace");
 
@@ -4428,7 +4649,11 @@ mod tests {
 
     #[test]
     fn comb_sort_handles_empty_input() {
-        let trace = trace_comb_sort(SortInput { values: vec![] }).expect("trace");
+        let trace = trace_comb_sort(SortInput {
+            values: vec![],
+            target_index: None,
+        })
+        .expect("trace");
 
         assert_eq!(
             trace.final_state,
@@ -4442,6 +4667,7 @@ mod tests {
     fn mergesort_trace_sorts_values() {
         let trace = trace_mergesort(SortInput {
             values: vec![9, 3, 7, 1, 4],
+            target_index: None,
         })
         .expect("trace");
 
@@ -4472,6 +4698,7 @@ mod tests {
             values: vec![
                 20, 21, 22, 9, 3, 7, 1, 4, 30, 31, 18, 12, 11, 10, 40, 41, 5, 6,
             ],
+            target_index: None,
         })
         .expect("trace");
 
@@ -4506,7 +4733,11 @@ mod tests {
 
     #[test]
     fn timsort_handles_empty_input() {
-        let trace = trace_timsort(SortInput { values: vec![] }).expect("trace");
+        let trace = trace_timsort(SortInput {
+            values: vec![],
+            target_index: None,
+        })
+        .expect("trace");
 
         assert_eq!(
             trace.final_state,
@@ -4520,6 +4751,7 @@ mod tests {
     fn heap_sort_trace_sorts_values() {
         let trace = trace_heap_sort(SortInput {
             values: vec![9, 3, 7, 1, 4],
+            target_index: None,
         })
         .expect("trace");
 
@@ -4548,6 +4780,7 @@ mod tests {
     fn pancake_sort_trace_sorts_values() {
         let trace = trace_pancake_sort(SortInput {
             values: vec![9, 3, 7, 1, 4],
+            target_index: None,
         })
         .expect("trace");
 
@@ -4580,7 +4813,11 @@ mod tests {
 
     #[test]
     fn pancake_sort_handles_empty_input() {
-        let trace = trace_pancake_sort(SortInput { values: vec![] }).expect("trace");
+        let trace = trace_pancake_sort(SortInput {
+            values: vec![],
+            target_index: None,
+        })
+        .expect("trace");
 
         assert_eq!(
             trace.final_state,
@@ -4588,6 +4825,65 @@ mod tests {
         );
         assert!(trace.events.is_empty());
         assert_valid_sort_trace(&trace);
+    }
+
+    #[test]
+    fn quickselect_trace_selects_target_index() {
+        let trace = trace_quickselect(SortInput {
+            values: vec![9, 3, 7, 1, 4],
+            target_index: Some(2),
+        })
+        .expect("trace");
+
+        let VisualizationState::Array { values } = &trace.final_state else {
+            panic!("quickselect must finish with array state");
+        };
+        assert_eq!(values[2], 4);
+        assert!(
+            trace
+                .events
+                .iter()
+                .any(|event| matches!(event, TraceEvent::SortPivot { .. }))
+        );
+        assert!(
+            trace
+                .events
+                .iter()
+                .any(|event| matches!(event, TraceEvent::SortPartition { .. }))
+        );
+        assert!(
+            trace
+                .events
+                .iter()
+                .any(|event| matches!(event, TraceEvent::SortCompare { .. }))
+        );
+        assert_valid_quickselect_trace(&trace);
+    }
+
+    #[test]
+    fn quickselect_defaults_to_median_index() {
+        let trace = trace_quickselect(SortInput {
+            values: vec![10, 2, 8, 4, 6],
+            target_index: None,
+        })
+        .expect("trace");
+
+        let VisualizationState::Array { values } = &trace.final_state else {
+            panic!("quickselect must finish with array state");
+        };
+        assert_eq!(values[2], 6);
+        assert_valid_quickselect_trace(&trace);
+    }
+
+    #[test]
+    fn quickselect_rejects_out_of_bounds_target() {
+        let error = trace_quickselect(SortInput {
+            values: vec![3, 1, 2],
+            target_index: Some(3),
+        })
+        .expect_err("invalid quickselect target");
+
+        assert!(error.message().contains("outside"));
     }
 
     #[test]
@@ -4906,6 +5202,7 @@ mod tests {
             AlgorithmId::Timsort,
             AlgorithmId::HeapSort,
             AlgorithmId::PancakeSort,
+            AlgorithmId::Quickselect,
             AlgorithmId::Bfs,
             AlgorithmId::Dfs,
             AlgorithmId::Dijkstra,
@@ -4933,6 +5230,7 @@ mod tests {
                 | AlgorithmId::Timsort
                 | AlgorithmId::HeapSort
                 | AlgorithmId::PancakeSort => assert_valid_sort_trace(&trace),
+                AlgorithmId::Quickselect => assert_valid_quickselect_trace(&trace),
                 AlgorithmId::Bfs
                 | AlgorithmId::Dfs
                 | AlgorithmId::Dijkstra
@@ -5006,6 +5304,79 @@ mod tests {
             panic!("sort trace must finish with an array state");
         };
         assert!(final_values.windows(2).all(|pair| pair[0] <= pair[1]));
+    }
+
+    fn assert_valid_quickselect_trace(trace: &Trace) {
+        let VisualizationState::Array { values } = &trace.initial_state else {
+            panic!("quickselect trace must start with an array state");
+        };
+        assert_eq!(trace.algorithm, AlgorithmId::Quickselect);
+        assert_eq!(trace.metadata.event_count, trace.events.len());
+
+        let len = values.len();
+        assert!(len > 0);
+        let selected_index = trace
+            .events
+            .iter()
+            .rev()
+            .find_map(|event| match event {
+                TraceEvent::SortMarkSorted { indices, .. } if indices.len() == 1 => {
+                    Some(indices[0])
+                }
+                _ => None,
+            })
+            .expect("quickselect marks the selected index");
+        assert!(selected_index < len);
+
+        for event in &trace.events {
+            match event {
+                TraceEvent::SortPivot { index, range, .. } => {
+                    assert!(*index < len);
+                    assert!(range[0] <= range[1]);
+                    assert!(range[1] < len);
+                }
+                TraceEvent::SortCompare { indices, .. } | TraceEvent::SortSwap { indices, .. } => {
+                    assert!(indices.iter().all(|index| *index < len));
+                }
+                TraceEvent::SortPartition {
+                    range,
+                    boundary,
+                    scanner,
+                    ..
+                } => {
+                    assert!(range[0] <= *boundary);
+                    assert!(*boundary <= range[1]);
+                    assert!(range[0] <= *scanner);
+                    assert!(*scanner <= range[1]);
+                    assert!(range[1] < len);
+                }
+                TraceEvent::SortMarkSorted { indices, .. } => {
+                    assert!(indices.iter().all(|index| *index < len));
+                }
+                _ => panic!("quickselect trace contains non-sort event: {event:?}"),
+            }
+        }
+
+        let VisualizationState::Array {
+            values: final_values,
+        } = &trace.final_state
+        else {
+            panic!("quickselect trace must finish with an array state");
+        };
+        let mut sorted = values.clone();
+        sorted.sort();
+        let selected_value = final_values[selected_index];
+        assert_eq!(selected_value, sorted[selected_index]);
+        assert!(
+            final_values[..selected_index]
+                .iter()
+                .all(|value| *value <= selected_value)
+        );
+        assert!(
+            final_values[selected_index + 1..]
+                .iter()
+                .all(|value| *value >= selected_value)
+        );
     }
 
     fn assert_valid_graph_trace(trace: &Trace) {

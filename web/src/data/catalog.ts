@@ -93,6 +93,13 @@ export const algorithms: AlgorithmCatalogItem[] = [
     summary: "Flip prefixes to move each largest value into place.",
   },
   {
+    id: "quickselect",
+    label: "Quickselect",
+    category: "sorting",
+    status: "available",
+    summary: "Partition around pivots until the requested rank is selected.",
+  },
+  {
     id: "selectionSort",
     label: "Selection Sort",
     category: "sorting",

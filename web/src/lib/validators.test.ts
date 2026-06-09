@@ -76,6 +76,19 @@ describe("parseSortInput", () => {
       value: { values: [5, 1, 4] },
     });
   });
+
+  it("routes quickselect custom input with a target index through the sort parser", () => {
+    expect(parseCustomInput("quickselect", '{"values":[8,3,5],"targetIndex":1}')).toEqual({
+      type: "sort",
+      value: { values: [8, 3, 5], targetIndex: 1 },
+    });
+  });
+
+  it("rejects quickselect target indexes outside the values array", () => {
+    expect(() => parseCustomInput("quickselect", '{"values":[8,3,5],"targetIndex":3}')).toThrow(
+      "targetIndex",
+    );
+  });
 });
 
 describe("parseGraphInput", () => {

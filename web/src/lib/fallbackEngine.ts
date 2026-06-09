@@ -34,6 +34,10 @@ export function generateTraceFallback(request: AlgorithmRequest): Trace {
     return tracePancakeSort(request.input.value);
   }
 
+  if (request.algorithm === "quickselect" && request.input.type === "sort") {
+    return traceQuickselect(request.input.value);
+  }
+
   if (request.algorithm === "selectionSort" && request.input.type === "sort") {
     return traceSelectionSort(request.input.value);
   }
@@ -143,6 +147,90 @@ function traceQuicksort(input: SortInput): Trace {
       inputSize: values.length,
       eventCount: events.length,
       resultSummary: `Sorted ${values.length} values.`,
+    },
+  };
+}
+
+function traceQuickselect(input: SortInput): Trace {
+  const initialValues = [...input.values];
+  const values = [...input.values];
+  const events: TraceEvent[] = [];
+
+  if (values.length > 128) {
+    throw new Error("Quickselect input is capped at 128 values for interactive playback.");
+  }
+  if (values.length === 0) {
+    throw new Error("Quickselect requires at least one value to select from.");
+  }
+
+  const targetIndex = input.targetIndex ?? Math.floor(values.length / 2);
+  if (targetIndex < 0 || targetIndex >= values.length) {
+    throw new Error(`Quickselect targetIndex ${targetIndex} is outside the values array.`);
+  }
+
+  let low = 0;
+  let high = values.length - 1;
+  while (true) {
+    events.push({
+      type: "sortPartition",
+      range: [low, high],
+      boundary: targetIndex,
+      scanner: low,
+      message: `Search range ${low}..${high} for index ${targetIndex}.`,
+    });
+
+    const pivotIndex = high;
+    const pivotValue = values[pivotIndex];
+    events.push({
+      type: "sortPivot",
+      index: pivotIndex,
+      value: pivotValue,
+      range: [low, high],
+      message: `Choose ${pivotValue} at index ${pivotIndex} as the pivot.`,
+    });
+
+    const pivotFinal = quickselectPartition(values, low, high, events);
+    if (pivotFinal === targetIndex) {
+      events.push({
+        type: "sortMarkSorted",
+        indices: [targetIndex],
+        message: `Index ${targetIndex} now holds the selected value ${values[targetIndex]}.`,
+      });
+      break;
+    }
+
+    if (targetIndex < pivotFinal) {
+      high = pivotFinal - 1;
+      events.push({
+        type: "sortPartition",
+        range: [low, high],
+        boundary: targetIndex,
+        scanner: low,
+        message: `Target is left of pivot; keep range ${low}..${high}.`,
+      });
+    } else {
+      low = pivotFinal + 1;
+      events.push({
+        type: "sortPartition",
+        range: [low, high],
+        boundary: targetIndex,
+        scanner: low,
+        message: `Target is right of pivot; keep range ${low}..${high}.`,
+      });
+    }
+  }
+
+  return {
+    algorithm: "quickselect",
+    initialState: { type: "array", values: initialValues },
+    finalState: { type: "array", values },
+    events,
+    metadata: {
+      algorithmName: "Quickselect",
+      category: "Sorting",
+      inputSize: values.length,
+      eventCount: events.length,
+      resultSummary: `Selected index ${targetIndex}: ${values[targetIndex]}.`,
     },
   };
 }
@@ -1627,6 +1715,57 @@ function quicksortRange(values: number[], low: number, high: number, events: Tra
       quicksortRange(values, rightLow, high, events);
     }
   }
+}
+
+function quickselectPartition(values: number[], low: number, high: number, events: TraceEvent[]) {
+  const pivotValue = values[high];
+  let boundary = low;
+
+  for (let scanner = low; scanner < high; scanner += 1) {
+    events.push({
+      type: "sortCompare",
+      indices: [scanner, high],
+      message: `Compare ${values[scanner]} at index ${scanner} with pivot ${pivotValue}.`,
+    });
+    events.push({
+      type: "sortPartition",
+      range: [low, high],
+      boundary,
+      scanner,
+      message: `Partition boundary is at index ${boundary}.`,
+    });
+
+    if (values[scanner] <= pivotValue) {
+      if (boundary !== scanner) {
+        swap(values, boundary, scanner);
+        events.push({
+          type: "sortSwap",
+          indices: [boundary, scanner],
+          values: [...values],
+          message: `Move ${values[boundary]} into the lower partition.`,
+        });
+      }
+      boundary += 1;
+    }
+  }
+
+  if (boundary !== high) {
+    swap(values, boundary, high);
+    events.push({
+      type: "sortSwap",
+      indices: [boundary, high],
+      values: [...values],
+      message: `Place pivot ${pivotValue} at index ${boundary}.`,
+    });
+  }
+
+  events.push({
+    type: "sortMarkSorted",
+    indices: [boundary],
+    message: `Pivot ${pivotValue} is fixed at index ${boundary}.`,
+  });
+
+  return boundary;
 }
 
 function traceBfs(input: GraphInput, stopAtTarget: boolean): Trace {

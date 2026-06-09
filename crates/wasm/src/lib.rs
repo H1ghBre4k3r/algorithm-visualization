@@ -21,6 +21,7 @@ pub fn example_request_for(algorithm: &str) -> Result<JsValue, JsValue> {
         "cocktailShakerSort" => AlgorithmId::CocktailShakerSort,
         "oddEvenSort" => AlgorithmId::OddEvenSort,
         "pancakeSort" => AlgorithmId::PancakeSort,
+        "quickselect" => AlgorithmId::Quickselect,
         "selectionSort" => AlgorithmId::SelectionSort,
         "shellSort" => AlgorithmId::ShellSort,
         "countingSort" => AlgorithmId::CountingSort,
