@@ -40,6 +40,7 @@ Reference: https://impeccable.style
   - Comb gap pass: violet range wash with amber gapped comparisons.
   - Cocktail sweep: violet shrinking range with amber forward/backward comparisons.
   - Odd-even phase: violet full-range band with amber alternating adjacent pairs.
+  - Pancake flip: violet prefix band with red flip swaps and green fixed suffix.
   - Bubble pass fixed tail: green.
   - Merge range: violet range wash with amber comparisons.
   - Timsort run: violet natural-run bands with amber run-head comparisons.

@@ -86,6 +86,13 @@ export const algorithms: AlgorithmCatalogItem[] = [
     summary: "Alternate odd and even adjacent phases until no swaps remain.",
   },
   {
+    id: "pancakeSort",
+    label: "Pancake Sort",
+    category: "sorting",
+    status: "available",
+    summary: "Flip prefixes to move each largest value into place.",
+  },
+  {
     id: "selectionSort",
     label: "Selection Sort",
     category: "sorting",

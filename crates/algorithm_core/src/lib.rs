@@ -11,6 +11,7 @@ pub enum AlgorithmId {
     BubbleSort,
     CocktailShakerSort,
     OddEvenSort,
+    PancakeSort,
     SelectionSort,
     ShellSort,
     CountingSort,
@@ -65,6 +66,7 @@ pub enum AlgorithmOptions {
     BubbleSort(BubbleSortOptions),
     CocktailShakerSort(CocktailShakerSortOptions),
     OddEvenSort(OddEvenSortOptions),
+    PancakeSort(PancakeSortOptions),
     SelectionSort(SelectionSortOptions),
     ShellSort(ShellSortOptions),
     CountingSort(CountingSortOptions),
@@ -111,6 +113,10 @@ pub struct CocktailShakerSortOptions {}
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct OddEvenSortOptions {}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct PancakeSortOptions {}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
@@ -450,6 +456,7 @@ pub fn generate_trace(request: AlgorithmRequest) -> Result<Trace, AlgorithmError
             trace_cocktail_shaker_sort(input)
         }
         (AlgorithmId::OddEvenSort, InputData::Sort(input)) => trace_odd_even_sort(input),
+        (AlgorithmId::PancakeSort, InputData::Sort(input)) => trace_pancake_sort(input),
         (AlgorithmId::SelectionSort, InputData::Sort(input)) => trace_selection_sort(input),
         (AlgorithmId::ShellSort, InputData::Sort(input)) => trace_shell_sort(input),
         (AlgorithmId::CountingSort, InputData::Sort(input)) => trace_counting_sort(input),
@@ -506,6 +513,9 @@ pub fn generate_trace(request: AlgorithmRequest) -> Result<Trace, AlgorithmError
         )),
         (AlgorithmId::OddEvenSort, _) => Err(AlgorithmError::new(
             "Odd-Even Sort requires sort input with a values array.",
+        )),
+        (AlgorithmId::PancakeSort, _) => Err(AlgorithmError::new(
+            "Pancake Sort requires sort input with a values array.",
         )),
         (AlgorithmId::SelectionSort, _) => Err(AlgorithmError::new(
             "Selection Sort requires sort input with a values array.",
@@ -611,6 +621,14 @@ pub fn example_request(algorithm: AlgorithmId) -> AlgorithmRequest {
                 values: vec![42, 12, 77, 18, 93, 31, 64, 5, 56, 29],
             }),
             options: Some(AlgorithmOptions::OddEvenSort(OddEvenSortOptions::default())),
+        },
+        AlgorithmId::PancakeSort => AlgorithmRequest {
+            algorithm,
+            input_mode: InputMode::Example,
+            input: InputData::Sort(SortInput {
+                values: vec![42, 12, 77, 18, 93, 31, 64, 5, 56, 29],
+            }),
+            options: Some(AlgorithmOptions::PancakeSort(PancakeSortOptions::default())),
         },
         AlgorithmId::SelectionSort => AlgorithmRequest {
             algorithm,
@@ -1918,6 +1936,131 @@ pub fn trace_heap_sort(input: SortInput) -> Result<Trace, AlgorithmError> {
         events,
         metadata,
     })
+}
+
+pub fn trace_pancake_sort(input: SortInput) -> Result<Trace, AlgorithmError> {
+    if input.values.len() > 128 {
+        return Err(AlgorithmError::new(
+            "Pancake Sort input is capped at 128 values for interactive playback.",
+        ));
+    }
+
+    let initial_values = input.values.clone();
+    let mut values = input.values;
+    let mut events = Vec::new();
+    let len = values.len();
+
+    if len > 1 {
+        for unsorted_end in (1..len).rev() {
+            let mut max_index = 0;
+            events.push(TraceEvent::SortPartition {
+                range: [0, unsorted_end],
+                boundary: unsorted_end,
+                scanner: 0,
+                message: format!("Find largest pancake for position {unsorted_end}."),
+            });
+
+            for scanner in 1..=unsorted_end {
+                events.push(TraceEvent::SortCompare {
+                    indices: [max_index, scanner],
+                    message: format!(
+                        "Compare current largest {} with candidate {}.",
+                        values[max_index], values[scanner]
+                    ),
+                });
+
+                if values[scanner] > values[max_index] {
+                    max_index = scanner;
+                    events.push(TraceEvent::SortPartition {
+                        range: [0, unsorted_end],
+                        boundary: max_index,
+                        scanner,
+                        message: format!(
+                            "Largest pancake candidate {} is now at index {max_index}.",
+                            values[max_index]
+                        ),
+                    });
+                }
+            }
+
+            if max_index == unsorted_end {
+                events.push(TraceEvent::SortMarkSorted {
+                    indices: (unsorted_end..len).collect(),
+                    message: format!("Value at index {unsorted_end} is already fixed."),
+                });
+                continue;
+            }
+
+            if max_index > 0 {
+                events.push(TraceEvent::SortPartition {
+                    range: [0, max_index],
+                    boundary: max_index,
+                    scanner: 0,
+                    message: format!(
+                        "Flip prefix 0..{max_index} to bring the largest pancake to front."
+                    ),
+                });
+                pancake_flip(&mut values, max_index, &mut events);
+            }
+
+            events.push(TraceEvent::SortPartition {
+                range: [0, unsorted_end],
+                boundary: unsorted_end,
+                scanner: 0,
+                message: format!("Flip prefix 0..{unsorted_end} to fix the largest pancake."),
+            });
+            pancake_flip(&mut values, unsorted_end, &mut events);
+
+            events.push(TraceEvent::SortMarkSorted {
+                indices: (unsorted_end..len).collect(),
+                message: format!("Value at index {unsorted_end} is fixed after pancake flips."),
+            });
+        }
+
+        events.push(TraceEvent::SortMarkSorted {
+            indices: (0..len).collect(),
+            message: "All pancakes are stacked in sorted order.".to_string(),
+        });
+    } else if len == 1 {
+        events.push(TraceEvent::SortMarkSorted {
+            indices: vec![0],
+            message: "Single value is already sorted.".to_string(),
+        });
+    }
+
+    let metadata = TraceMetadata {
+        algorithm_name: "Pancake Sort".to_string(),
+        category: "Sorting".to_string(),
+        input_size: values.len(),
+        event_count: events.len(),
+        result_summary: format!("Sorted {} values.", values.len()),
+    };
+
+    Ok(Trace {
+        algorithm: AlgorithmId::PancakeSort,
+        initial_state: VisualizationState::Array {
+            values: initial_values,
+        },
+        final_state: VisualizationState::Array { values },
+        events,
+        metadata,
+    })
+}
+
+fn pancake_flip(values: &mut [i32], end: usize, events: &mut Vec<TraceEvent>) {
+    let mut left = 0;
+    let mut right = end;
+
+    while left < right {
+        values.swap(left, right);
+        events.push(TraceEvent::SortSwap {
+            indices: [left, right],
+            values: values.to_vec(),
+            message: format!("Flip prefix by swapping positions {left} and {right}."),
+        });
+        left += 1;
+        right -= 1;
+    }
 }
 
 fn heap_sift_down(
@@ -4402,6 +4545,52 @@ mod tests {
     }
 
     #[test]
+    fn pancake_sort_trace_sorts_values() {
+        let trace = trace_pancake_sort(SortInput {
+            values: vec![9, 3, 7, 1, 4],
+        })
+        .expect("trace");
+
+        assert_eq!(
+            trace.final_state,
+            VisualizationState::Array {
+                values: vec![1, 3, 4, 7, 9]
+            }
+        );
+        assert!(
+            trace
+                .events
+                .iter()
+                .any(|event| matches!(event, TraceEvent::SortPartition { .. }))
+        );
+        assert!(
+            trace
+                .events
+                .iter()
+                .any(|event| matches!(event, TraceEvent::SortCompare { .. }))
+        );
+        assert!(
+            trace
+                .events
+                .iter()
+                .any(|event| matches!(event, TraceEvent::SortSwap { .. }))
+        );
+        assert_valid_sort_trace(&trace);
+    }
+
+    #[test]
+    fn pancake_sort_handles_empty_input() {
+        let trace = trace_pancake_sort(SortInput { values: vec![] }).expect("trace");
+
+        assert_eq!(
+            trace.final_state,
+            VisualizationState::Array { values: vec![] }
+        );
+        assert!(trace.events.is_empty());
+        assert_valid_sort_trace(&trace);
+    }
+
+    #[test]
     fn bfs_trace_finds_shortest_unweighted_path() {
         let trace = trace_bfs(example_graph(), true).expect("trace");
 
@@ -4716,6 +4905,7 @@ mod tests {
             AlgorithmId::Mergesort,
             AlgorithmId::Timsort,
             AlgorithmId::HeapSort,
+            AlgorithmId::PancakeSort,
             AlgorithmId::Bfs,
             AlgorithmId::Dfs,
             AlgorithmId::Dijkstra,
@@ -4741,7 +4931,8 @@ mod tests {
                 | AlgorithmId::CombSort
                 | AlgorithmId::Mergesort
                 | AlgorithmId::Timsort
-                | AlgorithmId::HeapSort => assert_valid_sort_trace(&trace),
+                | AlgorithmId::HeapSort
+                | AlgorithmId::PancakeSort => assert_valid_sort_trace(&trace),
                 AlgorithmId::Bfs
                 | AlgorithmId::Dfs
                 | AlgorithmId::Dijkstra
@@ -4774,6 +4965,7 @@ mod tests {
                 | AlgorithmId::Mergesort
                 | AlgorithmId::Timsort
                 | AlgorithmId::HeapSort
+                | AlgorithmId::PancakeSort
         ));
         assert_eq!(trace.metadata.event_count, trace.events.len());
 

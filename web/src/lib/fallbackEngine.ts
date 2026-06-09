@@ -30,6 +30,10 @@ export function generateTraceFallback(request: AlgorithmRequest): Trace {
     return traceOddEvenSort(request.input.value);
   }
 
+  if (request.algorithm === "pancakeSort" && request.input.type === "sort") {
+    return tracePancakeSort(request.input.value);
+  }
+
   if (request.algorithm === "selectionSort" && request.input.type === "sort") {
     return traceSelectionSort(request.input.value);
   }
@@ -480,6 +484,126 @@ function traceOddEvenSort(input: SortInput): Trace {
       resultSummary: `Sorted ${values.length} values.`,
     },
   };
+}
+
+function tracePancakeSort(input: SortInput): Trace {
+  const initialValues = [...input.values];
+  const values = [...input.values];
+  const events: TraceEvent[] = [];
+
+  if (values.length > 128) {
+    throw new Error("Pancake Sort input is capped at 128 values for interactive playback.");
+  }
+
+  if (values.length > 1) {
+    for (let unsortedEnd = values.length - 1; unsortedEnd >= 1; unsortedEnd -= 1) {
+      let maxIndex = 0;
+      events.push({
+        type: "sortPartition",
+        range: [0, unsortedEnd],
+        boundary: unsortedEnd,
+        scanner: 0,
+        message: `Find largest pancake for position ${unsortedEnd}.`,
+      });
+
+      for (let scanner = 1; scanner <= unsortedEnd; scanner += 1) {
+        events.push({
+          type: "sortCompare",
+          indices: [maxIndex, scanner],
+          message: `Compare current largest ${values[maxIndex]} with candidate ${values[scanner]}.`,
+        });
+
+        if (values[scanner] > values[maxIndex]) {
+          maxIndex = scanner;
+          events.push({
+            type: "sortPartition",
+            range: [0, unsortedEnd],
+            boundary: maxIndex,
+            scanner,
+            message: `Largest pancake candidate ${values[maxIndex]} is now at index ${maxIndex}.`,
+          });
+        }
+      }
+
+      if (maxIndex === unsortedEnd) {
+        events.push({
+          type: "sortMarkSorted",
+          indices: Array.from({ length: values.length - unsortedEnd }, (_, index) => unsortedEnd + index),
+          message: `Value at index ${unsortedEnd} is already fixed.`,
+        });
+        continue;
+      }
+
+      if (maxIndex > 0) {
+        events.push({
+          type: "sortPartition",
+          range: [0, maxIndex],
+          boundary: maxIndex,
+          scanner: 0,
+          message: `Flip prefix 0..${maxIndex} to bring the largest pancake to front.`,
+        });
+        pancakeFlip(values, maxIndex, events);
+      }
+
+      events.push({
+        type: "sortPartition",
+        range: [0, unsortedEnd],
+        boundary: unsortedEnd,
+        scanner: 0,
+        message: `Flip prefix 0..${unsortedEnd} to fix the largest pancake.`,
+      });
+      pancakeFlip(values, unsortedEnd, events);
+
+      events.push({
+        type: "sortMarkSorted",
+        indices: Array.from({ length: values.length - unsortedEnd }, (_, index) => unsortedEnd + index),
+        message: `Value at index ${unsortedEnd} is fixed after pancake flips.`,
+      });
+    }
+
+    events.push({
+      type: "sortMarkSorted",
+      indices: values.map((_, index) => index),
+      message: "All pancakes are stacked in sorted order.",
+    });
+  } else if (values.length === 1) {
+    events.push({
+      type: "sortMarkSorted",
+      indices: [0],
+      message: "Single value is already sorted.",
+    });
+  }
+
+  return {
+    algorithm: "pancakeSort",
+    initialState: { type: "array", values: initialValues },
+    finalState: { type: "array", values },
+    events,
+    metadata: {
+      algorithmName: "Pancake Sort",
+      category: "Sorting",
+      inputSize: values.length,
+      eventCount: events.length,
+      resultSummary: `Sorted ${values.length} values.`,
+    },
+  };
+}
+
+function pancakeFlip(values: number[], end: number, events: TraceEvent[]) {
+  let left = 0;
+  let right = end;
+
+  while (left < right) {
+    swap(values, left, right);
+    events.push({
+      type: "sortSwap",
+      indices: [left, right],
+      values: [...values],
+      message: `Flip prefix by swapping positions ${left} and ${right}.`,
+    });
+    left += 1;
+    right -= 1;
+  }
 }
 
 function traceSelectionSort(input: SortInput): Trace {

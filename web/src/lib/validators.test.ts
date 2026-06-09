@@ -69,6 +69,13 @@ describe("parseSortInput", () => {
       value: { values: [6, 1, 5] },
     });
   });
+
+  it("routes pancake sort custom input through the sort parser", () => {
+    expect(parseCustomInput("pancakeSort", '{"values":[5,1,4]}')).toEqual({
+      type: "sort",
+      value: { values: [5, 1, 4] },
+    });
+  });
 });
 
 describe("parseGraphInput", () => {
