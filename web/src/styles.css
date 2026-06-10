@@ -490,16 +490,22 @@ button:disabled {
   .topbar {
     align-items: flex-start;
     flex-direction: column;
+    gap: 12px;
   }
 
   .category-tabs {
     width: 100%;
-    justify-content: stretch;
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    overflow-x: auto;
+    padding-bottom: 2px;
+    scroll-snap-type: x proximity;
   }
 
   .tab {
-    flex: 1;
-    max-width: none;
+    flex: 0 0 min(230px, 72vw);
+    max-width: min(230px, 72vw);
+    scroll-snap-align: start;
   }
 
   .workspace {
@@ -515,9 +521,10 @@ button:disabled {
   }
 
   .algorithm-section {
-    display: block;
+    display: grid;
+    gap: 12px;
     min-height: 0;
-    overflow: visible;
+    overflow: hidden;
   }
 
   .input-config-section {
@@ -526,8 +533,18 @@ button:disabled {
   }
 
   .algorithm-list {
-    overflow: visible;
-    padding-right: 0;
+    display: flex;
+    gap: 10px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 0 0 4px;
+    scroll-snap-type: x proximity;
+  }
+
+  .algorithm-option {
+    flex: 0 0 min(270px, 78vw);
+    min-height: 86px;
+    scroll-snap-align: start;
   }
 
   .visual-area {
@@ -535,48 +552,210 @@ button:disabled {
   }
 
   .canvas-shell {
-    height: auto;
-    min-height: 360px;
+    height: clamp(320px, 58vh, 520px);
+    min-height: 320px;
     max-height: none;
   }
 
   textarea {
-    min-height: 240px;
+    min-height: 180px;
     max-height: none;
   }
 }
 
 @media (max-width: 560px) {
+  body {
+    min-width: 0;
+  }
+
+  .app-shell {
+    width: 100%;
+    overflow-x: hidden;
+    padding-bottom: 164px;
+  }
+
   .topbar,
   .visual-area,
   .control-section {
     padding: 12px;
   }
 
+  .topbar {
+    position: sticky;
+    top: 0;
+    z-index: 4;
+    min-height: 0;
+  }
+
   .brand {
+    width: 100%;
     min-width: 0;
+  }
+
+  .brand-mark {
+    width: 34px;
+    height: 34px;
+    flex: 0 0 auto;
   }
 
   .brand h1 {
     font-size: 16px;
   }
 
+  .brand p {
+    font-size: 11px;
+  }
+
+  .category-tabs {
+    width: calc(100vw - 24px);
+  }
+
+  .tab {
+    flex-basis: min(150px, 42vw);
+    max-width: min(150px, 42vw);
+    min-height: 54px;
+    padding: 8px 10px;
+  }
+
+  .tab small {
+    display: none;
+  }
+
+  .workspace {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .control-panel {
+    order: 2;
+    border-bottom: 0;
+  }
+
+  .visual-area {
+    order: 1;
+  }
+
+  .algorithm-section {
+    padding-bottom: 10px;
+  }
+
+  .algorithm-option {
+    flex-basis: min(250px, 76vw);
+    min-height: 76px;
+    padding: 10px;
+  }
+
+  .algorithm-option small {
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
   .segmented,
   .metrics {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .segmented button {
+    min-height: 46px;
+    padding: 0 6px;
+    white-space: normal;
   }
 
   .range-control {
     grid-template-columns: 1fr;
   }
 
-  .transport,
+  .range-control input {
+    min-height: 34px;
+  }
+
+  .endpoint-controls {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .endpoint-controls select {
+    min-height: 44px;
+  }
+
+  .playback-section {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 3;
+    padding: 10px 12px;
+    border-top: 1px solid rgba(23, 32, 51, 0.12);
+    box-shadow: 0 -8px 18px rgba(23, 32, 51, 0.08);
+  }
+
+  .playback-section h2 {
+    display: none;
+  }
+
+  .transport {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 48px 48px;
+    margin-bottom: 8px;
+  }
+
+  .playback-section .range-control {
+    grid-template-columns: 52px minmax(0, 1fr) 64px;
+    gap: 8px;
+  }
+
+  .playback-section .range-control input {
+    min-height: 28px;
+  }
+
   .inspector {
     flex-direction: column;
   }
 
-  .primary-action,
   .icon-button {
+    width: 48px;
+    min-height: 46px;
+  }
+
+  .primary-action {
     width: 100%;
+    min-height: 46px;
+  }
+
+  .metrics {
+    gap: 8px;
+  }
+
+  .metric {
+    padding: 8px;
+  }
+
+  .metric strong {
+    font-size: 16px;
+  }
+
+  .visual-area {
+    padding-top: 12px;
+    gap: 10px;
+  }
+
+  .canvas-shell {
+    height: 44vh;
+    min-height: 300px;
+    max-height: 350px;
+  }
+
+  .inspector {
+    min-height: 0;
+    padding: 12px;
+  }
+
+  .inspector h2 {
+    font-size: 16px;
+  }
+
+  textarea {
+    min-height: 160px;
   }
 }
