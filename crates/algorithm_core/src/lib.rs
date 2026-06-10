@@ -37,6 +37,7 @@ pub enum AlgorithmId {
     PrefixTrie,
     Handshake,
     TimeSync,
+    Paxos,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -100,6 +101,7 @@ pub enum AlgorithmOptions {
     PrefixTrie(PrefixTrieOptions),
     Handshake(HandshakeOptions),
     TimeSync(TimeSyncOptions),
+    Paxos(PaxosOptions),
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -249,6 +251,10 @@ pub struct HandshakeOptions {}
 #[serde(rename_all = "camelCase")]
 pub struct TimeSyncOptions {}
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct PaxosOptions {}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SortInput {
@@ -314,6 +320,8 @@ pub struct DistributedInput {
     pub latency_ms: u32,
     #[serde(default)]
     pub clock_offsets: Vec<DistributedClockOffset>,
+    #[serde(default)]
+    pub proposal_value: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -321,6 +329,8 @@ pub struct DistributedInput {
 pub struct DistributedPeer {
     pub id: String,
     pub label: String,
+    #[serde(default)]
+    pub role: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -635,6 +645,7 @@ pub fn generate_trace(request: AlgorithmRequest) -> Result<Trace, AlgorithmError
         (AlgorithmId::PrefixTrie, InputData::Sequence(input)) => trace_prefix_trie(input),
         (AlgorithmId::Handshake, InputData::Distributed(input)) => trace_handshake(input),
         (AlgorithmId::TimeSync, InputData::Distributed(input)) => trace_time_sync(input),
+        (AlgorithmId::Paxos, InputData::Distributed(input)) => trace_paxos(input),
         (AlgorithmId::Quicksort, _) => Err(AlgorithmError::new(
             "Quicksort requires sort input with a values array.",
         )),
@@ -727,6 +738,9 @@ pub fn generate_trace(request: AlgorithmRequest) -> Result<Trace, AlgorithmError
         )),
         (AlgorithmId::TimeSync, _) => Err(AlgorithmError::new(
             "Time Synchronization requires distributed input with peers and clock offsets.",
+        )),
+        (AlgorithmId::Paxos, _) => Err(AlgorithmError::new(
+            "Paxos requires distributed input with proposer, acceptor, and learner peers.",
         )),
     }
 }
@@ -1009,14 +1023,17 @@ pub fn example_request(algorithm: AlgorithmId) -> AlgorithmRequest {
                     DistributedPeer {
                         id: "client".to_string(),
                         label: "Client".to_string(),
+                        role: None,
                     },
                     DistributedPeer {
                         id: "server".to_string(),
                         label: "Server".to_string(),
+                        role: None,
                     },
                     DistributedPeer {
                         id: "observer".to_string(),
                         label: "Observer".to_string(),
+                        role: None,
                     },
                 ],
                 initiator: "client".to_string(),
@@ -1024,6 +1041,7 @@ pub fn example_request(algorithm: AlgorithmId) -> AlgorithmRequest {
                 coordinator: None,
                 latency_ms: 120,
                 clock_offsets: Vec::new(),
+                proposal_value: String::new(),
             }),
             options: Some(AlgorithmOptions::Handshake(HandshakeOptions::default())),
         },
@@ -1035,18 +1053,22 @@ pub fn example_request(algorithm: AlgorithmId) -> AlgorithmRequest {
                     DistributedPeer {
                         id: "coordinator".to_string(),
                         label: "Coordinator".to_string(),
+                        role: None,
                     },
                     DistributedPeer {
                         id: "edge-a".to_string(),
                         label: "Edge A".to_string(),
+                        role: None,
                     },
                     DistributedPeer {
                         id: "edge-b".to_string(),
                         label: "Edge B".to_string(),
+                        role: None,
                     },
                     DistributedPeer {
                         id: "edge-c".to_string(),
                         label: "Edge C".to_string(),
+                        role: None,
                     },
                 ],
                 initiator: String::new(),
@@ -1071,8 +1093,49 @@ pub fn example_request(algorithm: AlgorithmId) -> AlgorithmRequest {
                         offset_ms: 15,
                     },
                 ],
+                proposal_value: String::new(),
             }),
             options: Some(AlgorithmOptions::TimeSync(TimeSyncOptions::default())),
+        },
+        AlgorithmId::Paxos => AlgorithmRequest {
+            algorithm,
+            input_mode: InputMode::Example,
+            input: InputData::Distributed(DistributedInput {
+                peers: vec![
+                    DistributedPeer {
+                        id: "proposer".to_string(),
+                        label: "Proposer".to_string(),
+                        role: Some("proposer".to_string()),
+                    },
+                    DistributedPeer {
+                        id: "acceptor-a".to_string(),
+                        label: "Acceptor A".to_string(),
+                        role: Some("acceptor".to_string()),
+                    },
+                    DistributedPeer {
+                        id: "acceptor-b".to_string(),
+                        label: "Acceptor B".to_string(),
+                        role: Some("acceptor".to_string()),
+                    },
+                    DistributedPeer {
+                        id: "acceptor-c".to_string(),
+                        label: "Acceptor C".to_string(),
+                        role: Some("acceptor".to_string()),
+                    },
+                    DistributedPeer {
+                        id: "learner".to_string(),
+                        label: "Learner".to_string(),
+                        role: Some("learner".to_string()),
+                    },
+                ],
+                initiator: String::new(),
+                responder: String::new(),
+                coordinator: None,
+                latency_ms: 80,
+                clock_offsets: Vec::new(),
+                proposal_value: "deploy=v2".to_string(),
+            }),
+            options: Some(AlgorithmOptions::Paxos(PaxosOptions::default())),
         },
     }
 }
@@ -5208,6 +5271,249 @@ fn offset_state(offset: i32) -> String {
     }
 }
 
+pub fn trace_paxos(input: DistributedInput) -> Result<Trace, AlgorithmError> {
+    validate_paxos_input(&input)?;
+
+    let proposer = paxos_role_peers(&input, "proposer")[0].clone();
+    let acceptors = paxos_role_peers(&input, "acceptor");
+    let learner = paxos_role_peers(&input, "learner")[0].clone();
+    let quorum = acceptors.len() / 2 + 1;
+    let latency = input.latency_ms.max(40);
+    let proposal = input.proposal_value.clone();
+    let mut tick = 0_u32;
+    let mut events = Vec::new();
+    let mut messages = Vec::new();
+    let mut states = input
+        .peers
+        .iter()
+        .map(|peer| DistributedPeerState {
+            peer: peer.id.clone(),
+            state: peer.role.clone().unwrap_or_else(|| "idle".to_string()),
+        })
+        .collect::<Vec<_>>();
+
+    push_distributed_state(
+        &mut events,
+        &mut states,
+        &proposer.id,
+        "prepare n=1",
+        "Proposer starts ballot n=1 and asks acceptors to promise.",
+    );
+    for acceptor in &acceptors {
+        let message_id = format!("prepare-{}", acceptor.id);
+        push_distributed_message(
+            &mut events,
+            &mut messages,
+            DistributedMessage {
+                id: message_id.clone(),
+                from: proposer.id.clone(),
+                to: acceptor.id.clone(),
+                label: "PREPARE n=1".to_string(),
+                sent_at: tick,
+                deliver_at: tick + latency,
+            },
+            &format!("Proposer sends PREPARE n=1 to {}.", acceptor.label),
+        );
+        events.push(TraceEvent::DistributedDeliver {
+            message_id,
+            from: proposer.id.clone(),
+            to: acceptor.id.clone(),
+            label: "PREPARE n=1".to_string(),
+            message: format!("{} receives prepare request n=1.", acceptor.label),
+        });
+        push_distributed_state(
+            &mut events,
+            &mut states,
+            &acceptor.id,
+            "promised n=1",
+            &format!("{} promises not to accept older ballots.", acceptor.label),
+        );
+    }
+
+    tick += latency;
+    for acceptor in &acceptors {
+        let message_id = format!("promise-{}", acceptor.id);
+        push_distributed_message(
+            &mut events,
+            &mut messages,
+            DistributedMessage {
+                id: message_id.clone(),
+                from: acceptor.id.clone(),
+                to: proposer.id.clone(),
+                label: "PROMISE".to_string(),
+                sent_at: tick,
+                deliver_at: tick + latency,
+            },
+            &format!("{} promises ballot n=1.", acceptor.label),
+        );
+        events.push(TraceEvent::DistributedDeliver {
+            message_id,
+            from: acceptor.id.clone(),
+            to: proposer.id.clone(),
+            label: "PROMISE".to_string(),
+            message: format!("Proposer receives promise from {}.", acceptor.label),
+        });
+    }
+    push_distributed_state(
+        &mut events,
+        &mut states,
+        &proposer.id,
+        "quorum promised",
+        &format!("Proposer has a quorum of {quorum} promises."),
+    );
+
+    tick += latency;
+    for acceptor in &acceptors {
+        let message_id = format!("accept-{}", acceptor.id);
+        push_distributed_message(
+            &mut events,
+            &mut messages,
+            DistributedMessage {
+                id: message_id.clone(),
+                from: proposer.id.clone(),
+                to: acceptor.id.clone(),
+                label: format!("ACCEPT {proposal}"),
+                sent_at: tick,
+                deliver_at: tick + latency,
+            },
+            &format!("Proposer asks {} to accept '{}'.", acceptor.label, proposal),
+        );
+        events.push(TraceEvent::DistributedDeliver {
+            message_id,
+            from: proposer.id.clone(),
+            to: acceptor.id.clone(),
+            label: format!("ACCEPT {proposal}"),
+            message: format!(
+                "{} receives accept request for '{}'.",
+                acceptor.label, proposal
+            ),
+        });
+        push_distributed_state(
+            &mut events,
+            &mut states,
+            &acceptor.id,
+            &format!("accepted {proposal}"),
+            &format!("{} accepts value '{}'.", acceptor.label, proposal),
+        );
+    }
+
+    tick += latency;
+    for acceptor in &acceptors {
+        let message_id = format!("accepted-{}", acceptor.id);
+        push_distributed_message(
+            &mut events,
+            &mut messages,
+            DistributedMessage {
+                id: message_id.clone(),
+                from: acceptor.id.clone(),
+                to: learner.id.clone(),
+                label: "ACCEPTED".to_string(),
+                sent_at: tick,
+                deliver_at: tick + latency,
+            },
+            &format!(
+                "{} notifies learner that '{}' was accepted.",
+                acceptor.label, proposal
+            ),
+        );
+        events.push(TraceEvent::DistributedDeliver {
+            message_id,
+            from: acceptor.id.clone(),
+            to: learner.id.clone(),
+            label: "ACCEPTED".to_string(),
+            message: format!("Learner receives accepted notice from {}.", acceptor.label),
+        });
+    }
+    push_distributed_state(
+        &mut events,
+        &mut states,
+        &learner.id,
+        &format!("chosen {proposal}"),
+        &format!("Learner observes quorum and chooses '{}'.", proposal),
+    );
+    push_distributed_state(
+        &mut events,
+        &mut states,
+        &proposer.id,
+        &format!("chosen {proposal}"),
+        "Proposer observes the chosen value.",
+    );
+
+    let initial_states = input
+        .peers
+        .iter()
+        .map(|peer| DistributedPeerState {
+            peer: peer.id.clone(),
+            state: peer.role.clone().unwrap_or_else(|| "idle".to_string()),
+        })
+        .collect::<Vec<_>>();
+    let metadata = TraceMetadata {
+        algorithm_name: "Paxos".to_string(),
+        category: "Distributed".to_string(),
+        input_size: input.peers.len(),
+        event_count: events.len(),
+        result_summary: format!(
+            "Chosen value '{}' with quorum {}/{}.",
+            proposal,
+            quorum,
+            acceptors.len()
+        ),
+    };
+
+    Ok(Trace {
+        algorithm: AlgorithmId::Paxos,
+        initial_state: VisualizationState::Distributed {
+            peers: input.peers.clone(),
+            states: initial_states,
+            messages: Vec::new(),
+        },
+        final_state: VisualizationState::Distributed {
+            peers: input.peers,
+            states,
+            messages,
+        },
+        events,
+        metadata,
+    })
+}
+
+fn validate_paxos_input(input: &DistributedInput) -> Result<(), AlgorithmError> {
+    validate_distributed_peers(input, "Paxos")?;
+    let proposers = paxos_role_peers(input, "proposer");
+    let acceptors = paxos_role_peers(input, "acceptor");
+    let learners = paxos_role_peers(input, "learner");
+    if proposers.len() != 1 {
+        return Err(AlgorithmError::new(
+            "Paxos needs exactly one proposer peer.",
+        ));
+    }
+    if acceptors.len() < 3 {
+        return Err(AlgorithmError::new(
+            "Paxos needs at least three acceptor peers.",
+        ));
+    }
+    if learners.is_empty() {
+        return Err(AlgorithmError::new(
+            "Paxos needs at least one learner peer.",
+        ));
+    }
+    if input.proposal_value.trim().is_empty() {
+        return Err(AlgorithmError::new(
+            "Paxos needs a non-empty proposalValue.",
+        ));
+    }
+    Ok(())
+}
+
+fn paxos_role_peers(input: &DistributedInput, role: &str) -> Vec<DistributedPeer> {
+    input
+        .peers
+        .iter()
+        .filter(|peer| peer.role.as_deref() == Some(role))
+        .cloned()
+        .collect()
+}
+
 pub fn trace_levenshtein(input: SequenceInput) -> Result<Trace, AlgorithmError> {
     validate_edit_distance_sequence(&input)?;
 
@@ -6917,10 +7223,12 @@ mod tests {
                 DistributedPeer {
                     id: "a".to_string(),
                     label: "A".to_string(),
+                    role: None,
                 },
                 DistributedPeer {
                     id: "b".to_string(),
                     label: "B".to_string(),
+                    role: None,
                 },
             ],
             initiator: "a".to_string(),
@@ -6928,6 +7236,7 @@ mod tests {
             coordinator: None,
             latency_ms: 80,
             clock_offsets: Vec::new(),
+            proposal_value: String::new(),
         })
         .expect("trace");
 
@@ -6962,10 +7271,12 @@ mod tests {
                 DistributedPeer {
                     id: "a".to_string(),
                     label: "A".to_string(),
+                    role: None,
                 },
                 DistributedPeer {
                     id: "b".to_string(),
                     label: "B".to_string(),
+                    role: None,
                 },
             ],
             initiator: "a".to_string(),
@@ -6973,6 +7284,7 @@ mod tests {
             coordinator: None,
             latency_ms: 80,
             clock_offsets: Vec::new(),
+            proposal_value: String::new(),
         })
         .expect_err("invalid handshake input");
 
@@ -6986,14 +7298,17 @@ mod tests {
                 DistributedPeer {
                     id: "c".to_string(),
                     label: "Coordinator".to_string(),
+                    role: None,
                 },
                 DistributedPeer {
                     id: "a".to_string(),
                     label: "A".to_string(),
+                    role: None,
                 },
                 DistributedPeer {
                     id: "b".to_string(),
                     label: "B".to_string(),
+                    role: None,
                 },
             ],
             initiator: String::new(),
@@ -7014,6 +7329,7 @@ mod tests {
                     offset_ms: -18,
                 },
             ],
+            proposal_value: String::new(),
         })
         .expect("trace");
 
@@ -7039,10 +7355,12 @@ mod tests {
                 DistributedPeer {
                     id: "c".to_string(),
                     label: "Coordinator".to_string(),
+                    role: None,
                 },
                 DistributedPeer {
                     id: "a".to_string(),
                     label: "A".to_string(),
+                    role: None,
                 },
             ],
             initiator: String::new(),
@@ -7053,10 +7371,95 @@ mod tests {
                 peer: "missing".to_string(),
                 offset_ms: 10,
             }],
+            proposal_value: String::new(),
         })
         .expect_err("invalid time sync input");
 
         assert!(error.message().contains("unknown peer"));
+    }
+
+    #[test]
+    fn paxos_trace_chooses_value_after_quorum() {
+        let trace = trace_paxos(DistributedInput {
+            peers: paxos_test_peers(),
+            initiator: String::new(),
+            responder: String::new(),
+            coordinator: None,
+            latency_ms: 80,
+            clock_offsets: Vec::new(),
+            proposal_value: "blue".to_string(),
+        })
+        .expect("trace");
+
+        let VisualizationState::Distributed {
+            states, messages, ..
+        } = &trace.final_state
+        else {
+            panic!("paxos must finish with distributed state");
+        };
+        assert_eq!(messages.len(), 12);
+        assert!(
+            states
+                .iter()
+                .any(|state| state.peer == "learner" && state.state == "chosen blue")
+        );
+        assert!(trace.events.iter().any(|event| matches!(
+            event,
+            TraceEvent::DistributedSend { label, .. } if label == "PROMISE"
+        )));
+        assert!(trace.events.iter().any(|event| matches!(
+            event,
+            TraceEvent::DistributedSend { label, .. } if label == "ACCEPTED"
+        )));
+        assert_valid_distributed_trace(&trace);
+    }
+
+    #[test]
+    fn paxos_rejects_missing_acceptor_quorum() {
+        let mut peers = paxos_test_peers();
+        peers.retain(|peer| peer.id != "acceptor-c");
+        let error = trace_paxos(DistributedInput {
+            peers,
+            initiator: String::new(),
+            responder: String::new(),
+            coordinator: None,
+            latency_ms: 80,
+            clock_offsets: Vec::new(),
+            proposal_value: "blue".to_string(),
+        })
+        .expect_err("invalid paxos input");
+
+        assert!(error.message().contains("three acceptor"));
+    }
+
+    fn paxos_test_peers() -> Vec<DistributedPeer> {
+        vec![
+            DistributedPeer {
+                id: "proposer".to_string(),
+                label: "Proposer".to_string(),
+                role: Some("proposer".to_string()),
+            },
+            DistributedPeer {
+                id: "acceptor-a".to_string(),
+                label: "Acceptor A".to_string(),
+                role: Some("acceptor".to_string()),
+            },
+            DistributedPeer {
+                id: "acceptor-b".to_string(),
+                label: "Acceptor B".to_string(),
+                role: Some("acceptor".to_string()),
+            },
+            DistributedPeer {
+                id: "acceptor-c".to_string(),
+                label: "Acceptor C".to_string(),
+                role: Some("acceptor".to_string()),
+            },
+            DistributedPeer {
+                id: "learner".to_string(),
+                label: "Learner".to_string(),
+                role: Some("learner".to_string()),
+            },
+        ]
     }
 
     #[test]
@@ -7093,6 +7496,7 @@ mod tests {
             AlgorithmId::PrefixTrie,
             AlgorithmId::Handshake,
             AlgorithmId::TimeSync,
+            AlgorithmId::Paxos,
         ] {
             let trace = generate_trace(example_request(algorithm)).expect("trace");
             match algorithm {
@@ -7125,7 +7529,7 @@ mod tests {
                 AlgorithmId::Kmp | AlgorithmId::BoyerMoore | AlgorithmId::Levenshtein => {
                     assert_valid_sequence_trace(&trace)
                 }
-                AlgorithmId::Handshake | AlgorithmId::TimeSync => {
+                AlgorithmId::Handshake | AlgorithmId::TimeSync | AlgorithmId::Paxos => {
                     assert_valid_distributed_trace(&trace)
                 }
             }
@@ -7478,7 +7882,7 @@ mod tests {
         };
         assert!(matches!(
             trace.algorithm,
-            AlgorithmId::Handshake | AlgorithmId::TimeSync
+            AlgorithmId::Handshake | AlgorithmId::TimeSync | AlgorithmId::Paxos
         ));
         assert_eq!(trace.metadata.event_count, trace.events.len());
 

@@ -197,3 +197,21 @@ export function randomTimeSyncInput(size: number): DistributedInput {
     })),
   };
 }
+
+export function randomPaxosInput(size: number): DistributedInput {
+  const acceptorCount = Math.max(3, Math.min(6, size));
+  const proposalValues = ["deploy=v2", "leader=p1", "slot=42", "color=blue"];
+  return {
+    peers: [
+      { id: "proposer", label: "Proposer", role: "proposer" },
+      ...Array.from({ length: acceptorCount }, (_, index) => ({
+        id: `acceptor-${index + 1}`,
+        label: `Acceptor ${index + 1}`,
+        role: "acceptor",
+      })),
+      { id: "learner", label: "Learner", role: "learner" },
+    ],
+    latencyMs: 70 + Math.floor(Math.random() * 120),
+    proposalValue: proposalValues[Math.floor(Math.random() * proposalValues.length)],
+  };
+}

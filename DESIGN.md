@@ -74,3 +74,4 @@ Reference: https://impeccable.style
   - In-flight messages: amber when active, green once part of a completed exchange.
   - Session states: blue for half-open handshake states, green for established peers.
   - Clock offsets: amber while drifting, green when synchronized to coordinator time.
+  - Paxos rounds: blue for prepare/promise quorum progress, green for accepted and chosen values.

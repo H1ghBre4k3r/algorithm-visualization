@@ -7,7 +7,7 @@ The current milestone establishes the website architecture and proves the trace 
 - Sorting: Quicksort, Insertion Sort, Bubble Sort, Cocktail Shaker Sort, Odd-Even Sort, Pancake Sort, Quickselect, Bitonic Sort, Selection Sort, Shell Sort, Counting Sort, Radix Sort, Bucket Sort, Comb Sort, Mergesort, Timsort, Heap Sort.
 - Graph: Breadth-first search, depth-first search, Dijkstra, Bellman-Ford, A*, Prim MST, Kruskal, Topological Sort.
 - Sequence: Knuth-Morris-Pratt, Boyer-Moore, Levenshtein Distance, Prefix Tree.
-- Distributed: Handshake Protocol, Time Synchronization.
+- Distributed: Handshake Protocol, Time Synchronization, Paxos.
 - Input modes: example, random, custom JSON.
 - Rendering: Canvas 2D with real-time playback controls.
 - Engine: Rust trace core, WASM wrapper, TypeScript fallback for local development before `wasm-pack` output is generated.
@@ -45,12 +45,12 @@ Before an algorithm is marked live in the catalog, it must have:
    - Extend dedicated trie and automata views while keeping table rendering for dynamic-programming algorithms.
 
 5. Add distributed algorithms.
-   - Add leader election and Paxos.
-   - Add timeline/message-lane rendering with deterministic simulation steps.
+   - Add leader election plus failure/retry variants for consensus protocols.
+   - Extend timeline/message-lane rendering with deterministic simulation steps for partitions and retries.
 
 ## Current Gaps
 
-- Only Quicksort, Insertion Sort, Bubble Sort, Cocktail Shaker Sort, Odd-Even Sort, Pancake Sort, Quickselect, Bitonic Sort, Selection Sort, Shell Sort, Counting Sort, Radix Sort, Bucket Sort, Comb Sort, Mergesort, Timsort, Heap Sort, Breadth-first search, depth-first search, Dijkstra, Bellman-Ford, A*, Prim MST, Kruskal, Topological Sort, Knuth-Morris-Pratt, Boyer-Moore, Levenshtein Distance, Prefix Tree, Handshake Protocol, and Time Synchronization are live.
+- Only Quicksort, Insertion Sort, Bubble Sort, Cocktail Shaker Sort, Odd-Even Sort, Pancake Sort, Quickselect, Bitonic Sort, Selection Sort, Shell Sort, Counting Sort, Radix Sort, Bucket Sort, Comb Sort, Mergesort, Timsort, Heap Sort, Breadth-first search, depth-first search, Dijkstra, Bellman-Ford, A*, Prim MST, Kruskal, Topological Sort, Knuth-Morris-Pratt, Boyer-Moore, Levenshtein Distance, Prefix Tree, Handshake Protocol, Time Synchronization, and Paxos are live.
 - Planned algorithms are visible in the catalog but intentionally do not generate traces yet.
 - Browser verification is manual right now.
 - The frontend can run without generated WASM through a TypeScript fallback, but full Rust/WASM browser execution still requires `wasm-pack`.

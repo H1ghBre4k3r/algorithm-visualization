@@ -271,7 +271,7 @@ export const algorithms: AlgorithmCatalogItem[] = [
     id: "paxos",
     label: "Paxos",
     category: "distributed",
-    status: "planned",
+    status: "available",
     summary: "Animate proposer, acceptor, and learner message rounds.",
   },
 ];

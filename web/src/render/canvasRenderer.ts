@@ -83,7 +83,10 @@ export function drawTrace(canvas: HTMLCanvasElement, trace: Trace, step: number)
     drawEditDistanceTrace(context, width, height, trace, step);
   }
 
-  if ((trace.algorithm === "handshake" || trace.algorithm === "timeSync") && trace.initialState.type === "distributed") {
+  if (
+    (trace.algorithm === "handshake" || trace.algorithm === "timeSync" || trace.algorithm === "paxos") &&
+    trace.initialState.type === "distributed"
+  ) {
     drawDistributedTrace(context, width, height, trace, step);
   }
 }
@@ -480,7 +483,7 @@ function drawDistributedTrace(
   }
 
   for (const message of frame.messages) {
-    drawDistributedMessage(context, message, positions, timelineLeft, timelineRight, frame.activeMessageId);
+    drawDistributedMessage(context, message, positions, timelineLeft, timelineRight, frame.maxTime, frame.activeMessageId);
   }
 
   context.restore();
@@ -489,6 +492,7 @@ function drawDistributedTrace(
 interface DistributedFrame {
   states: Map<string, string>;
   messages: DistributedMessage[];
+  maxTime: number;
   activeMessageId: string | null;
 }
 
@@ -526,7 +530,22 @@ function deriveDistributedFrame(trace: Trace, step: number): DistributedFrame {
     }
   }
 
-  return { states, messages, activeMessageId };
+  const allMessages =
+    trace.finalState.type === "distributed"
+      ? trace.finalState.messages
+      : trace.events
+          .filter((event): event is Extract<TraceEvent, { type: "distributedSend" }> => event.type === "distributedSend")
+          .map((event) => ({
+            id: event.messageId,
+            from: event.from,
+            to: event.to,
+            label: event.label,
+            sentAt: event.sentAt,
+            deliverAt: event.deliverAt,
+          }));
+  const maxTime = Math.max(1, ...allMessages.map((message) => message.deliverAt));
+
+  return { states, messages, maxTime, activeMessageId };
 }
 
 function drawDistributedMessage(
@@ -535,15 +554,16 @@ function drawDistributedMessage(
   positions: Map<string, { x: number; y: number }>,
   timelineLeft: number,
   timelineRight: number,
+  maxTime: number,
   activeMessageId: string | null,
 ) {
   const from = positions.get(message.from);
   const to = positions.get(message.to);
   if (!from || !to) return;
 
-  const maxTime = Math.max(1, message.deliverAt);
-  const startX = timelineLeft + (message.sentAt / maxTime) * (timelineRight - timelineLeft) * 0.72;
-  const endX = timelineLeft + (message.deliverAt / maxTime) * (timelineRight - timelineLeft) * 0.72 + 54;
+  const timelineWidth = timelineRight - timelineLeft;
+  const startX = timelineLeft + (message.sentAt / maxTime) * timelineWidth;
+  const endX = timelineLeft + (message.deliverAt / maxTime) * timelineWidth;
   const active = activeMessageId === message.id;
   const color = active ? palette.compare : palette.path;
 
@@ -578,7 +598,9 @@ function drawDistributedMessage(
 function stateColor(state: string) {
   if (state === "established") return palette.path;
   if (state.startsWith("synced")) return palette.path;
+  if (state.startsWith("accepted") || state.startsWith("chosen")) return palette.path;
   if (state === "syn-sent" || state === "syn-received" || state === "coordinator") return palette.source;
+  if (state.startsWith("prepare") || state.startsWith("promised") || state === "quorum promised") return palette.source;
   if (state.startsWith("offset")) return palette.compare;
   return palette.muted;
 }

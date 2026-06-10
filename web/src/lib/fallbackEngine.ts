@@ -142,6 +142,10 @@ export function generateTraceFallback(request: AlgorithmRequest): Trace {
     return traceTimeSync(request.input.value);
   }
 
+  if (request.algorithm === "paxos" && request.input.type === "distributed") {
+    return tracePaxos(request.input.value);
+  }
+
   throw new Error("Algorithm and input type do not match.");
 }
 
@@ -3690,6 +3694,183 @@ function traceTimeSync(input: DistributedInput): Trace {
   };
 }
 
+function tracePaxos(input: DistributedInput): Trace {
+  validatePaxosInput(input);
+
+  const proposer = paxosRolePeers(input, "proposer")[0];
+  const acceptors = paxosRolePeers(input, "acceptor");
+  const learner = paxosRolePeers(input, "learner")[0];
+  const proposal = input.proposalValue ?? "";
+  const quorum = Math.floor(acceptors.length / 2) + 1;
+  const latency = Math.max(40, input.latencyMs ?? 120);
+  const events: TraceEvent[] = [];
+  const messages: DistributedMessage[] = [];
+  const states = input.peers.map<DistributedPeerState>((peer) => ({
+    peer: peer.id,
+    state: typeof peer.role === "string" && peer.role.trim() !== "" ? peer.role : "idle",
+  }));
+  let tick = 0;
+
+  pushDistributedState(events, states, proposer.id, "prepare n=1", `${proposer.label} starts Paxos round n=1.`);
+
+  for (const acceptor of acceptors) {
+    const messageId = `prepare-${acceptor.id}`;
+    pushDistributedMessage(
+      events,
+      messages,
+      {
+        id: messageId,
+        from: proposer.id,
+        to: acceptor.id,
+        label: "PREPARE n=1",
+        sentAt: tick,
+        deliverAt: tick + latency,
+      },
+      `${proposer.label} sends prepare n=1 to ${acceptor.label}.`,
+    );
+    events.push({
+      type: "distributedDeliver",
+      messageId,
+      from: proposer.id,
+      to: acceptor.id,
+      label: "PREPARE n=1",
+      message: `${acceptor.label} receives prepare n=1.`,
+    });
+    pushDistributedState(events, states, acceptor.id, "promised n=1", `${acceptor.label} promises proposal number 1.`);
+  }
+
+  tick += latency;
+  for (const acceptor of acceptors) {
+    const messageId = `promise-${acceptor.id}`;
+    pushDistributedMessage(
+      events,
+      messages,
+      {
+        id: messageId,
+        from: acceptor.id,
+        to: proposer.id,
+        label: "PROMISE",
+        sentAt: tick,
+        deliverAt: tick + latency,
+      },
+      `${acceptor.label} replies with a promise.`,
+    );
+    events.push({
+      type: "distributedDeliver",
+      messageId,
+      from: acceptor.id,
+      to: proposer.id,
+      label: "PROMISE",
+      message: `${proposer.label} receives ${acceptor.label}'s promise.`,
+    });
+  }
+
+  tick += latency;
+  pushDistributedState(
+    events,
+    states,
+    proposer.id,
+    "quorum promised",
+    `${proposer.label} observes ${quorum} promises and moves to accept.`,
+  );
+
+  for (const acceptor of acceptors) {
+    const messageId = `accept-${acceptor.id}`;
+    pushDistributedMessage(
+      events,
+      messages,
+      {
+        id: messageId,
+        from: proposer.id,
+        to: acceptor.id,
+        label: `ACCEPT ${proposal}`,
+        sentAt: tick,
+        deliverAt: tick + latency,
+      },
+      `${proposer.label} asks ${acceptor.label} to accept ${proposal}.`,
+    );
+    events.push({
+      type: "distributedDeliver",
+      messageId,
+      from: proposer.id,
+      to: acceptor.id,
+      label: `ACCEPT ${proposal}`,
+      message: `${acceptor.label} receives accept for ${proposal}.`,
+    });
+    pushDistributedState(events, states, acceptor.id, `accepted ${proposal}`, `${acceptor.label} accepts ${proposal}.`);
+  }
+
+  tick += latency;
+  for (const acceptor of acceptors) {
+    const messageId = `accepted-${acceptor.id}`;
+    pushDistributedMessage(
+      events,
+      messages,
+      {
+        id: messageId,
+        from: acceptor.id,
+        to: learner.id,
+        label: "ACCEPTED",
+        sentAt: tick,
+        deliverAt: tick + latency,
+      },
+      `${acceptor.label} tells ${learner.label} the value was accepted.`,
+    );
+    events.push({
+      type: "distributedDeliver",
+      messageId,
+      from: acceptor.id,
+      to: learner.id,
+      label: "ACCEPTED",
+      message: `${learner.label} receives accepted from ${acceptor.label}.`,
+    });
+  }
+
+  tick += latency;
+  pushDistributedState(
+    events,
+    states,
+    learner.id,
+    `chosen ${proposal}`,
+    `${learner.label} observes a quorum and chooses ${proposal}.`,
+  );
+  pushDistributedState(
+    events,
+    states,
+    proposer.id,
+    `chosen ${proposal}`,
+    `${proposer.label} learns ${proposal} was chosen.`,
+  );
+
+  const initialStates = input.peers.map<DistributedPeerState>((peer) => ({
+    peer: peer.id,
+    state: typeof peer.role === "string" && peer.role.trim() !== "" ? peer.role : "idle",
+  }));
+  return {
+    algorithm: "paxos",
+    initialState: {
+      type: "distributed",
+      peers: input.peers,
+      states: initialStates,
+      messages: [],
+    },
+    finalState: {
+      type: "distributed",
+      peers: input.peers,
+      states,
+      messages,
+    },
+    events,
+    metadata: {
+      algorithmName: "Paxos",
+      category: "Distributed",
+      inputSize: input.peers.length,
+      eventCount: events.length,
+      resultSummary: `Chosen value ${proposal} with quorum ${quorum}/${acceptors.length}.`,
+    },
+  };
+}
+
 function pushDistributedState(
   events: TraceEvent[],
   states: DistributedPeerState[],
@@ -4060,6 +4241,26 @@ function validateTimeSyncInput(input: DistributedInput) {
   }
 }
 
+function validatePaxosInput(input: DistributedInput) {
+  validateDistributedPeers(input, "Paxos");
+  const proposers = paxosRolePeers(input, "proposer");
+  const acceptors = paxosRolePeers(input, "acceptor");
+  const learners = paxosRolePeers(input, "learner");
+
+  if (proposers.length !== 1) {
+    throw new Error("Paxos needs exactly one proposer peer.");
+  }
+  if (acceptors.length < 3) {
+    throw new Error("Paxos needs at least three acceptor peers.");
+  }
+  if (learners.length < 1) {
+    throw new Error("Paxos needs at least one learner peer.");
+  }
+  if (!input.proposalValue || input.proposalValue.trim() === "") {
+    throw new Error("Paxos needs a non-empty proposalValue.");
+  }
+}
+
 function validateDistributedPeers(input: DistributedInput, label: string) {
   if (input.peers.length < 2) {
     throw new Error(`${label} needs at least two peers.`);
@@ -4084,6 +4285,10 @@ function validateDistributedPeers(input: DistributedInput, label: string) {
 
 function timeSyncCoordinator(input: DistributedInput) {
   return input.coordinator?.trim() ? input.coordinator : input.peers[0].id;
+}
+
+function paxosRolePeers(input: DistributedInput, role: string) {
+  return input.peers.filter((peer) => peer.role === role);
 }
 
 function offsetState(offset: number) {

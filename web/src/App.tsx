@@ -15,13 +15,14 @@ import {
   firstAvailableAlgorithm,
   type CategoryId,
 } from "./data/catalog";
-import { customTemplate, exampleRequest } from "./data/examples";
+import { customTemplate, exampleGraphInput, exampleRequest } from "./data/examples";
 import { generateTrace } from "./lib/engine";
 import {
   randomDagInput,
   randomDistributedInput,
   randomEditDistanceInput,
   randomGraphInput,
+  randomPaxosInput,
   randomSequenceInput,
   randomSortInput,
   randomTimeSyncInput,
@@ -55,11 +56,14 @@ export default function App() {
   const [graphSize, setGraphSize] = useState(7);
   const [sequenceSize, setSequenceSize] = useState(32);
   const [editSize, setEditSize] = useState(14);
+  const [graphSource, setGraphSource] = useState("A");
+  const [graphTarget, setGraphTarget] = useState("F");
   const [randomSort, setRandomSort] = useState<SortInput>(() => randomSortInput(18));
   const [randomGraph, setRandomGraph] = useState<GraphInput>(() => randomGraphInput(7));
   const [randomDag, setRandomDag] = useState<GraphInput>(() => randomDagInput(7));
   const [randomDistributed, setRandomDistributed] = useState<DistributedInput>(() => randomDistributedInput(4));
   const [randomTimeSync, setRandomTimeSync] = useState<DistributedInput>(() => randomTimeSyncInput(4));
+  const [randomPaxos, setRandomPaxos] = useState<DistributedInput>(() => randomPaxosInput(5));
   const [randomSequence, setRandomSequence] = useState<SequenceInput>(() => randomSequenceInput(32));
   const [randomEditDistance, setRandomEditDistance] = useState<SequenceInput>(() => randomEditDistanceInput(14));
   const [randomTrie, setRandomTrie] = useState<SequenceInput>(() => randomTrieInput(10));
@@ -95,6 +99,7 @@ export default function App() {
     prefixTrie: customTemplate("prefixTrie"),
     handshake: customTemplate("handshake"),
     timeSync: customTemplate("timeSync"),
+    paxos: customTemplate("paxos"),
   });
   const [trace, setTrace] = useState<Trace | null>(null);
   const [inputError, setInputError] = useState<string | null>(null);
@@ -116,10 +121,13 @@ export default function App() {
         randomDag,
         randomDistributed,
         randomTimeSync,
+        randomPaxos,
         randomSequence,
         randomEditDistance,
         randomTrie,
         customJson[algorithm],
+        graphSource,
+        graphTarget,
       );
       setInputError(null);
     } catch (error) {
@@ -161,10 +169,13 @@ export default function App() {
     randomDag,
     randomDistributed,
     randomTimeSync,
+    randomPaxos,
     randomSequence,
     randomEditDistance,
     randomTrie,
     customJson,
+    graphSource,
+    graphTarget,
   ]);
 
   useEffect(() => {
@@ -187,6 +198,19 @@ export default function App() {
   const activeAlgorithm = algorithms.find((item) => item.id === algorithm) ?? algorithms[0];
   const currentEvent = step > 0 ? (trace?.events[step - 1] ?? null) : null;
   const canPlay = Boolean(trace && trace.events.length > 0 && step < trace.events.length);
+  const graphControlInput =
+    inputMode === "example" && isPathGraphAlgorithm(algorithm)
+      ? exampleGraphInput
+      : inputMode === "random" && isPathGraphAlgorithm(algorithm)
+        ? randomGraph
+        : null;
+  const graphControlValue = algorithm === "topologicalSort" ? randomDag.nodes.length : randomGraph.nodes.length;
+  const distributedControlValue =
+    algorithm === "paxos"
+      ? randomPaxos.peers.filter((peer) => peer.role === "acceptor").length
+      : algorithm === "timeSync"
+        ? randomTimeSync.peers.length
+        : randomDistributed.peers.length;
 
   function refreshRandomInput() {
     if (isSortAlgorithm(algorithm)) {
@@ -198,14 +222,25 @@ export default function App() {
     } else if (algorithm === "levenshtein") {
       setRandomEditDistance(randomEditDistanceInput(editSize));
     } else if (algorithm === "handshake") {
-      setRandomDistributed(randomDistributedInput(graphSize));
+      setRandomDistributed(randomDistributedInput(randomDistributed.peers.length));
     } else if (algorithm === "timeSync") {
-      setRandomTimeSync(randomTimeSyncInput(graphSize));
+      setRandomTimeSync(randomTimeSyncInput(randomTimeSync.peers.length));
+    } else if (algorithm === "paxos") {
+      setRandomPaxos(randomPaxosInput(distributedControlValue));
     } else if (algorithm === "topologicalSort") {
-      setRandomDag(randomDagInput(graphSize));
+      setRandomDag(randomDagInput(randomDag.nodes.length));
     } else {
-      setRandomGraph(randomGraphInput(graphSize));
+      setRandomGraph(randomGraphInput(randomGraph.nodes.length));
     }
+  }
+
+  function changeInputMode(nextMode: InputMode) {
+    setInputMode(nextMode);
+    if (nextMode === "random") {
+      refreshRandomInput();
+    }
+    setStep(0);
+    setIsPlaying(false);
   }
 
   function resetCustomTemplate() {
@@ -272,7 +307,7 @@ export default function App() {
 
       <main className="workspace">
         <aside className="control-panel">
-          <section className="control-section">
+          <section className="control-section algorithm-section">
             <h2>Algorithm</h2>
             <div className="algorithm-list" role="list" aria-label="Algorithm">
               {visibleAlgorithms.map((item) => (
@@ -292,7 +327,7 @@ export default function App() {
             </div>
           </section>
 
-          <section className="control-section">
+          <section className="control-section input-mode-section">
             <h2>Input</h2>
             <div className="segmented" role="tablist" aria-label="Input mode">
               {inputModes.map((mode) => (
@@ -300,11 +335,7 @@ export default function App() {
                   key={mode.id}
                   className={mode.id === inputMode ? "active" : ""}
                   type="button"
-                  onClick={() => {
-                    setInputMode(mode.id);
-                    setStep(0);
-                    setIsPlaying(false);
-                  }}
+                  onClick={() => changeInputMode(mode.id)}
                 >
                   {mode.label}
                 </button>
@@ -313,7 +344,7 @@ export default function App() {
           </section>
 
           {inputMode === "random" && (
-            <section className="control-section">
+            <section className="control-section input-config-section">
               <div className="section-row">
                 <h2>{randomControlLabel(algorithm)}</h2>
                 <button className="icon-button" type="button" title="Generate" onClick={refreshRandomInput}>
@@ -337,7 +368,7 @@ export default function App() {
                   label="Count"
                   min={4}
                   max={12}
-                  value={graphSize}
+                  value={graphControlValue}
                   onChange={(value) => {
                     setGraphSize(value);
                     if (algorithm === "topologicalSort") {
@@ -348,16 +379,18 @@ export default function App() {
                   }}
                 />
               )}
-              {(algorithm === "handshake" || algorithm === "timeSync") && (
+              {(algorithm === "handshake" || algorithm === "timeSync" || algorithm === "paxos") && (
                 <RangeControl
-                  label="Peers"
-                  min={algorithm === "timeSync" ? 3 : 2}
-                  max={8}
-                  value={graphSize}
+                  label={algorithm === "paxos" ? "Acceptors" : "Peers"}
+                  min={algorithm === "paxos" || algorithm === "timeSync" ? 3 : 2}
+                  max={algorithm === "paxos" ? 6 : 8}
+                  value={distributedControlValue}
                   onChange={(value) => {
                     setGraphSize(value);
                     if (algorithm === "timeSync") {
                       setRandomTimeSync(randomTimeSyncInput(value));
+                    } else if (algorithm === "paxos") {
+                      setRandomPaxos(randomPaxosInput(value));
                     } else {
                       setRandomDistributed(randomDistributedInput(value));
                     }
@@ -395,8 +428,21 @@ export default function App() {
             </section>
           )}
 
+          {graphControlInput && (
+            <section className="control-section graph-values-section">
+              <h2>Path</h2>
+              <GraphEndpointControls
+                graph={graphControlInput}
+                source={graphSource}
+                target={graphTarget}
+                onSourceChange={setGraphSource}
+                onTargetChange={setGraphTarget}
+              />
+            </section>
+          )}
+
           {inputMode === "custom" && (
-            <section className="control-section fill">
+            <section className="control-section input-config-section fill">
               <div className="section-row">
                 <h2>JSON</h2>
                 <button className="icon-button" type="button" title="Reset template" onClick={resetCustomTemplate}>
@@ -413,7 +459,7 @@ export default function App() {
             </section>
           )}
 
-          <section className="control-section">
+          <section className="control-section playback-section">
             <h2>Playback</h2>
             <div className="transport">
               <button
@@ -488,13 +534,23 @@ function buildRequest(
   randomDag: GraphInput,
   randomDistributed: DistributedInput,
   randomTimeSync: DistributedInput,
+  randomPaxos: DistributedInput,
   randomSequence: SequenceInput,
   randomEditDistance: SequenceInput,
   randomTrie: SequenceInput,
   customJson: string,
+  graphSource: string,
+  graphTarget: string,
 ): AlgorithmRequest {
   if (inputMode === "example") {
-    return exampleRequest(algorithm);
+    const request = exampleRequest(algorithm);
+    if (isPathGraphAlgorithm(algorithm) && request.input.type === "graph") {
+      return {
+        ...request,
+        input: { type: "graph", value: applyGraphEndpoints(request.input.value, graphSource, graphTarget) },
+      };
+    }
+    return request;
   }
 
   if (inputMode === "custom") {
@@ -555,6 +611,14 @@ function buildRequest(
       options: optionsForAlgorithm(algorithm),
     };
   }
+  if (algorithm === "paxos") {
+    return {
+      algorithm,
+      inputMode,
+      input: { type: "distributed", value: randomPaxos },
+      options: optionsForAlgorithm(algorithm),
+    };
+  }
   if (algorithm === "primMst") {
     return {
       algorithm,
@@ -574,7 +638,10 @@ function buildRequest(
   return {
     algorithm,
     inputMode,
-    input: { type: "graph", value: randomGraph },
+    input: {
+      type: "graph",
+      value: isPathGraphAlgorithm(algorithm) ? applyGraphEndpoints(randomGraph, graphSource, graphTarget) : randomGraph,
+    },
     options: optionsForAlgorithm(algorithm),
   };
 }
@@ -649,6 +716,9 @@ function optionsForAlgorithm(algorithm: AvailableAlgorithmId): AlgorithmRequest[
   if (algorithm === "timeSync") {
     return { type: "timeSync", value: {} };
   }
+  if (algorithm === "paxos") {
+    return { type: "paxos", value: {} };
+  }
   if (algorithm === "bfs") {
     return { type: "bfs", value: { stopAtTarget: true } };
   }
@@ -676,6 +746,7 @@ function optionsForAlgorithm(algorithm: AvailableAlgorithmId): AlgorithmRequest[
 function randomControlLabel(algorithm: AvailableAlgorithmId) {
   if (isSortAlgorithm(algorithm)) return "Values";
   if (algorithm === "prefixTrie") return "Words";
+  if (algorithm === "paxos") return "Acceptors";
   if (algorithm === "handshake" || algorithm === "timeSync") return "Peers";
   if (algorithm === "kmp" || algorithm === "boyerMoore" || algorithm === "levenshtein") return "Text";
   return "Nodes";
@@ -723,6 +794,27 @@ function isGraphAlgorithm(algorithm: AvailableAlgorithmId) {
     algorithm === "kruskal" ||
     algorithm === "topologicalSort"
   );
+}
+
+function isPathGraphAlgorithm(algorithm: AvailableAlgorithmId) {
+  return (
+    algorithm === "bfs" ||
+    algorithm === "dfs" ||
+    algorithm === "dijkstra" ||
+    algorithm === "bellmanFord" ||
+    algorithm === "aStar"
+  );
+}
+
+function applyGraphEndpoints(input: GraphInput, source: string, target: string): GraphInput {
+  const nodeIds = input.nodes.map((node) => node.id);
+  const normalizedSource = nodeIds.includes(source) ? source : (nodeIds[0] ?? input.source);
+  const normalizedTarget = target === "" ? null : nodeIds.includes(target) ? target : (nodeIds.at(-1) ?? null);
+  return {
+    ...input,
+    source: normalizedSource,
+    target: normalizedTarget,
+  };
 }
 
 function VisualizationCanvas({ trace, step }: { trace: Trace; step: number }) {
@@ -778,6 +870,49 @@ function RangeControl({
         {suffix ? ` ${suffix}` : ""}
       </output>
     </label>
+  );
+}
+
+function GraphEndpointControls({
+  graph,
+  source,
+  target,
+  onSourceChange,
+  onTargetChange,
+}: {
+  graph: GraphInput;
+  source: string;
+  target: string;
+  onSourceChange: (value: string) => void;
+  onTargetChange: (value: string) => void;
+}) {
+  const sourceValue = graph.nodes.some((node) => node.id === source) ? source : graph.nodes[0]?.id ?? "";
+  const targetValue = target === "" || graph.nodes.some((node) => node.id === target) ? target : graph.nodes.at(-1)?.id ?? "";
+
+  return (
+    <div className="endpoint-controls">
+      <label>
+        <span>Start</span>
+        <select value={sourceValue} onChange={(event) => onSourceChange(event.target.value)}>
+          {graph.nodes.map((node) => (
+            <option key={node.id} value={node.id}>
+              {node.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label>
+        <span>Goal</span>
+        <select value={targetValue} onChange={(event) => onTargetChange(event.target.value)}>
+          <option value="">None</option>
+          {graph.nodes.map((node) => (
+            <option key={node.id} value={node.id}>
+              {node.label}
+            </option>
+          ))}
+        </select>
+      </label>
+    </div>
   );
 }
 

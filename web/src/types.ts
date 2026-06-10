@@ -29,9 +29,9 @@ export type AvailableAlgorithmId =
   | "levenshtein"
   | "prefixTrie"
   | "handshake"
-  | "timeSync";
-export type PlannedAlgorithmId =
+  | "timeSync"
   | "paxos";
+export type PlannedAlgorithmId = never;
 export type AlgorithmId = AvailableAlgorithmId | PlannedAlgorithmId;
 export type InputMode = "example" | "random" | "custom";
 
@@ -79,7 +79,8 @@ export type AlgorithmOptions =
   | { type: "levenshtein"; value: LevenshteinOptions }
   | { type: "prefixTrie"; value: PrefixTrieOptions }
   | { type: "handshake"; value: HandshakeOptions }
-  | { type: "timeSync"; value: TimeSyncOptions };
+  | { type: "timeSync"; value: TimeSyncOptions }
+  | { type: "paxos"; value: PaxosOptions };
 
 export interface QuicksortOptions {
   pivotStrategy: "last";
@@ -127,6 +128,7 @@ export type LevenshteinOptions = Record<string, never>;
 export type PrefixTrieOptions = Record<string, never>;
 export type HandshakeOptions = Record<string, never>;
 export type TimeSyncOptions = Record<string, never>;
+export type PaxosOptions = Record<string, never>;
 
 export interface SortInput {
   values: number[];
@@ -169,11 +171,13 @@ export interface DistributedInput {
   coordinator?: string | null;
   latencyMs?: number;
   clockOffsets?: DistributedClockOffset[];
+  proposalValue?: string;
 }
 
 export interface DistributedPeer {
   id: string;
   label: string;
+  role?: "proposer" | "acceptor" | "learner" | string | null;
 }
 
 export interface DistributedPeerState {

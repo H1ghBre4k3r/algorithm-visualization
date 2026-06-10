@@ -115,6 +115,18 @@ export const exampleTimeSyncInput: DistributedInput = {
   ],
 };
 
+export const examplePaxosInput: DistributedInput = {
+  peers: [
+    { id: "proposer", label: "Proposer", role: "proposer" },
+    { id: "acceptor-a", label: "Acceptor A", role: "acceptor" },
+    { id: "acceptor-b", label: "Acceptor B", role: "acceptor" },
+    { id: "acceptor-c", label: "Acceptor C", role: "acceptor" },
+    { id: "learner", label: "Learner", role: "learner" },
+  ],
+  latencyMs: 80,
+  proposalValue: "deploy=v2",
+};
+
 export function exampleRequest(algorithm: AvailableAlgorithmId): AlgorithmRequest {
   if (
     algorithm === "quicksort" ||
@@ -239,6 +251,15 @@ export function exampleRequest(algorithm: AvailableAlgorithmId): AlgorithmReques
     };
   }
 
+  if (algorithm === "paxos") {
+    return {
+      algorithm,
+      inputMode: "example",
+      input: { type: "distributed", value: structuredClone(examplePaxosInput) },
+      options: { type: "paxos", value: {} },
+    };
+  }
+
   if (algorithm === "bfs" || algorithm === "dfs") {
     return {
       algorithm,
@@ -321,6 +342,8 @@ export function customTemplate(algorithm: AvailableAlgorithmId): string {
           ? exampleHandshakeInput
         : algorithm === "timeSync"
           ? exampleTimeSyncInput
+        : algorithm === "paxos"
+          ? examplePaxosInput
           : algorithm === "topologicalSort"
             ? exampleDagInput
           : exampleGraphInput;

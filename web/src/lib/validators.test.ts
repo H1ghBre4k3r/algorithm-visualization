@@ -7,6 +7,7 @@ import {
   parseEditDistanceInput,
   parseGraphInput,
   parseKmpInput,
+  parsePaxosInput,
   parsePrefixTrieInput,
   parseSortInput,
   parseTimeSyncInput,
@@ -347,5 +348,45 @@ describe("parseTimeSyncInput", () => {
     expect(() => parseTimeSyncInput(JSON.stringify({ ...timeSync, clockOffsets: [] }))).toThrow(
       "clockOffsets",
     );
+  });
+});
+
+describe("parsePaxosInput", () => {
+  const paxos = {
+    peers: [
+      { id: "proposer", label: "Proposer", role: "proposer" },
+      { id: "acceptor-a", label: "Acceptor A", role: "acceptor" },
+      { id: "acceptor-b", label: "Acceptor B", role: "acceptor" },
+      { id: "acceptor-c", label: "Acceptor C", role: "acceptor" },
+      { id: "learner", label: "Learner", role: "learner" },
+    ],
+    latencyMs: 80,
+    proposalValue: "deploy=v2",
+  };
+
+  it("accepts proposer, acceptor, and learner roles", () => {
+    expect(parsePaxosInput(JSON.stringify(paxos))).toEqual(paxos);
+  });
+
+  it("routes Paxos custom input through the distributed parser", () => {
+    expect(parseCustomInput("paxos", JSON.stringify(paxos))).toEqual({
+      type: "distributed",
+      value: paxos,
+    });
+  });
+
+  it("rejects missing acceptor quorums", () => {
+    expect(() =>
+      parsePaxosInput(
+        JSON.stringify({
+          ...paxos,
+          peers: paxos.peers.filter((peer) => peer.id !== "acceptor-c"),
+        }),
+      ),
+    ).toThrow("three acceptor");
+  });
+
+  it("rejects empty proposals", () => {
+    expect(() => parsePaxosInput(JSON.stringify({ ...paxos, proposalValue: "" }))).toThrow("non-empty");
   });
 });

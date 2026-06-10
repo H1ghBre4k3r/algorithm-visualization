@@ -61,6 +61,9 @@ export function parseCustomInput(algorithm: AvailableAlgorithmId, raw: string): 
   if (algorithm === "timeSync") {
     return { type: "distributed", value: parseTimeSyncInput(raw) };
   }
+  if (algorithm === "paxos") {
+    return { type: "distributed", value: parsePaxosInput(raw) };
+  }
   const graphInput = parseGraphInput(raw);
   if (algorithm === "topologicalSort") {
     validateDirectedAcyclicGraph(graphInput);
@@ -303,6 +306,38 @@ export function parseTimeSyncInput(raw: string): DistributedInput {
   return { peers, coordinator, latencyMs, clockOffsets };
 }
 
+export function parsePaxosInput(raw: string): DistributedInput {
+  const parsed = readRecord(parseJson(raw));
+  const peers = parseDistributedPeers(parsed.peers);
+  const latencyMs = parseLatency(parsed.latencyMs, "Paxos");
+  const proposalValue = readString(parsed.proposalValue, "Paxos proposalValue");
+  const roleCounts = new Map<string, number>();
+
+  if (proposalValue.trim() === "") {
+    throw new InputValidationError("Paxos proposalValue cannot be empty.");
+  }
+
+  for (const peer of peers) {
+    const role = typeof peer.role === "string" ? peer.role : "";
+    if (role !== "proposer" && role !== "acceptor" && role !== "learner") {
+      throw new InputValidationError(`Paxos peer '${peer.id}' needs role proposer, acceptor, or learner.`);
+    }
+    roleCounts.set(role, (roleCounts.get(role) ?? 0) + 1);
+  }
+
+  if ((roleCounts.get("proposer") ?? 0) !== 1) {
+    throw new InputValidationError("Paxos needs exactly one proposer peer.");
+  }
+  if ((roleCounts.get("acceptor") ?? 0) < 3) {
+    throw new InputValidationError("Paxos needs at least three acceptor peers.");
+  }
+  if ((roleCounts.get("learner") ?? 0) < 1) {
+    throw new InputValidationError("Paxos needs at least one learner peer.");
+  }
+
+  return { peers, latencyMs, proposalValue };
+}
+
 function parseDistributedPeers(value: unknown): DistributedPeer[] {
   if (!Array.isArray(value) || value.length < 2) {
     throw new InputValidationError("Distributed input needs at least two peers.");
@@ -319,11 +354,12 @@ function parseDistributedPeer(value: unknown, index: number, seen: Set<string>):
   const peer = readRecord(value, `Peer ${index}`);
   const id = readString(peer.id, `Peer ${index} id`);
   const label = readString(peer.label, `Peer ${id} label`);
+  const role = typeof peer.role === "string" && peer.role.trim() !== "" ? peer.role : undefined;
   if (seen.has(id)) {
     throw new InputValidationError(`Duplicate peer id '${id}'.`);
   }
   seen.add(id);
-  return { id, label };
+  return role ? { id, label, role } : { id, label };
 }
 
 function parseLatency(value: unknown, label: string) {

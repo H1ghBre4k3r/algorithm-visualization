@@ -35,6 +35,7 @@ Browser-first algorithm visualization MVP with a Rust trace core, WASM bindings,
 - Prefix Tree trace generation and shared-prefix trie visualization.
 - Handshake Protocol trace generation and distributed message-lane visualization.
 - Time Synchronization trace generation and clock-offset convergence visualization.
+- Paxos trace generation and proposer/acceptor/learner message-lane visualization.
 - Example, random, and custom JSON inputs.
 - Playback controls for play, pause, step, reset, and speed.
 - Rust unit tests for algorithm correctness and trace shape.
