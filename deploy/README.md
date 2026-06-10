@@ -42,14 +42,14 @@ The app exposes `/healthz` for Kubernetes liveness and readiness checks.
 
 ## GitHub Pages
 
-GitHub Pages can host the same static Vite build without Docker. The workflow in `.github/workflows/pages.yml` runs on pushes to `main` and on manual dispatch, builds the Rust/WASM package, runs the web tests, builds Vite with the repository Pages base path, and deploys `web/dist`.
+GitHub Pages can host the same static Vite build without Docker. The workflow in `.github/workflows/pages.yml` runs on pushes to `main` and on manual dispatch, builds the Rust/WASM package, runs the web tests, builds Vite for the root path, and deploys `web/dist`.
 
 Before the first deployment, open the repository settings on GitHub and set **Pages -> Build and deployment -> Source** to **GitHub Actions**.
 
-For a project page, the published URL is:
+The current custom-domain deployment is served without a path prefix:
 
 ```text
-https://<owner>.github.io/<repository>/
+https://algo-viz.lome.dev/
 ```
 
-For a custom domain or an `<owner>.github.io` repository, adjust the workflow build step to use `--base="/"`.
+If deploying as a project page instead, adjust the workflow build step to use `--base="/<repository>/"`.
