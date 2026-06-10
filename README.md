@@ -82,6 +82,8 @@ docker compose up --build
 
 For K3s, build and push the image, update the image/host in `deploy/kubernetes`, then apply the kustomization. The provided ingress targets K3s' default Traefik controller.
 
+GitHub Pages is also supported for static hosting. Enable Pages with **GitHub Actions** as the source, then push to `main` or run the `Deploy GitHub Pages` workflow manually. The workflow builds the Rust/WASM package and publishes `web/dist`.
+
 ## Verification
 
 ```bash
