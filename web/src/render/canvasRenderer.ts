@@ -83,7 +83,7 @@ export function drawTrace(canvas: HTMLCanvasElement, trace: Trace, step: number)
     drawEditDistanceTrace(context, width, height, trace, step);
   }
 
-  if (trace.algorithm === "handshake" && trace.initialState.type === "distributed") {
+  if ((trace.algorithm === "handshake" || trace.algorithm === "timeSync") && trace.initialState.type === "distributed") {
     drawDistributedTrace(context, width, height, trace, step);
   }
 }
@@ -577,7 +577,9 @@ function drawDistributedMessage(
 
 function stateColor(state: string) {
   if (state === "established") return palette.path;
-  if (state === "syn-sent" || state === "syn-received") return palette.source;
+  if (state.startsWith("synced")) return palette.path;
+  if (state === "syn-sent" || state === "syn-received" || state === "coordinator") return palette.source;
+  if (state.startsWith("offset")) return palette.compare;
   return palette.muted;
 }
 

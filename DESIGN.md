@@ -73,3 +73,4 @@ Reference: https://impeccable.style
   - Peer lanes: restrained horizontal tracks with compact state badges.
   - In-flight messages: amber when active, green once part of a completed exchange.
   - Session states: blue for half-open handshake states, green for established peers.
+  - Clock offsets: amber while drifting, green when synchronized to coordinator time.

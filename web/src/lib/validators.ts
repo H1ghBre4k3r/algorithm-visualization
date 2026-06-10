@@ -56,7 +56,10 @@ export function parseCustomInput(algorithm: AvailableAlgorithmId, raw: string): 
     return { type: "sequence", value: parsePrefixTrieInput(raw) };
   }
   if (algorithm === "handshake") {
-    return { type: "distributed", value: parseDistributedInput(raw) };
+    return { type: "distributed", value: parseHandshakeInput(raw) };
+  }
+  if (algorithm === "timeSync") {
+    return { type: "distributed", value: parseTimeSyncInput(raw) };
   }
   const graphInput = parseGraphInput(raw);
   if (algorithm === "topologicalSort") {
@@ -220,6 +223,10 @@ export function parsePrefixTrieInput(raw: string): SequenceInput {
 }
 
 export function parseDistributedInput(raw: string): DistributedInput {
+  return parseHandshakeInput(raw);
+}
+
+export function parseHandshakeInput(raw: string): DistributedInput {
   const parsed = readRecord(parseJson(raw));
   const peersRaw = parsed.peers;
   const initiator = readString(parsed.initiator, "Handshake initiator");
@@ -257,6 +264,57 @@ export function parseDistributedInput(raw: string): DistributedInput {
   return { peers, initiator, responder, latencyMs };
 }
 
+export function parseTimeSyncInput(raw: string): DistributedInput {
+  const parsed = readRecord(parseJson(raw));
+  const peers = parseDistributedPeers(parsed.peers);
+  const coordinator = readString(parsed.coordinator, "Time Synchronization coordinator");
+  const latencyMs = parseLatency(parsed.latencyMs, "Time Synchronization");
+  const peerIds = new Set(peers.map((peer) => peer.id));
+  const clockOffsetsRaw = parsed.clockOffsets;
+
+  if (!peerIds.has(coordinator)) {
+    throw new InputValidationError(`Coordinator peer '${coordinator}' does not exist.`);
+  }
+  if (!Array.isArray(clockOffsetsRaw) || clockOffsetsRaw.length === 0) {
+    throw new InputValidationError("Time Synchronization input needs a non-empty clockOffsets array.");
+  }
+
+  const seen = new Set<string>();
+  const clockOffsets = clockOffsetsRaw.map((value, index) => {
+    const offset = readRecord(value, `Clock offset ${index}`);
+    const peer = readString(offset.peer, `Clock offset ${index} peer`);
+    const offsetMs = offset.offsetMs;
+    if (!peerIds.has(peer)) {
+      throw new InputValidationError(`Clock offset references unknown peer '${peer}'.`);
+    }
+    if (seen.has(peer)) {
+      throw new InputValidationError(`Duplicate clock offset for peer '${peer}'.`);
+    }
+    seen.add(peer);
+    if (typeof offsetMs !== "number" || !Number.isFinite(offsetMs) || !Number.isInteger(offsetMs)) {
+      throw new InputValidationError(`Clock offset for peer '${peer}' must be an integer.`);
+    }
+    if (offsetMs < -500 || offsetMs > 500) {
+      throw new InputValidationError(`Clock offset for peer '${peer}' must be between -500 and 500 ms.`);
+    }
+    return { peer, offsetMs };
+  });
+
+  return { peers, coordinator, latencyMs, clockOffsets };
+}
+
+function parseDistributedPeers(value: unknown): DistributedPeer[] {
+  if (!Array.isArray(value) || value.length < 2) {
+    throw new InputValidationError("Distributed input needs at least two peers.");
+  }
+  if (value.length > 8) {
+    throw new InputValidationError("Distributed visualizations support up to 8 peers.");
+  }
+
+  const seen = new Set<string>();
+  return value.map((peer, index) => parseDistributedPeer(peer, index, seen));
+}
+
 function parseDistributedPeer(value: unknown, index: number, seen: Set<string>): DistributedPeer {
   const peer = readRecord(value, `Peer ${index}`);
   const id = readString(peer.id, `Peer ${index} id`);
@@ -266,6 +324,14 @@ function parseDistributedPeer(value: unknown, index: number, seen: Set<string>):
   }
   seen.add(id);
   return { id, label };
+}
+
+function parseLatency(value: unknown, label: string) {
+  if (value === undefined) return 120;
+  if (typeof value !== "number" || !Number.isFinite(value) || !Number.isInteger(value) || value < 0) {
+    throw new InputValidationError(`${label} latencyMs must be a non-negative integer.`);
+  }
+  return value;
 }
 
 function parseNode(value: unknown, index: number): GraphNode {

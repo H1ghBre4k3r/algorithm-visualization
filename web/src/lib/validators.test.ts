@@ -9,6 +9,7 @@ import {
   parseKmpInput,
   parsePrefixTrieInput,
   parseSortInput,
+  parseTimeSyncInput,
 } from "./validators";
 
 describe("parseSortInput", () => {
@@ -303,5 +304,48 @@ describe("parseDistributedInput", () => {
     expect(() =>
       parseDistributedInput(JSON.stringify({ ...handshake, responder: "client" })),
     ).toThrow("different");
+  });
+});
+
+describe("parseTimeSyncInput", () => {
+  const timeSync = {
+    peers: [
+      { id: "coordinator", label: "Coordinator" },
+      { id: "edge", label: "Edge" },
+    ],
+    coordinator: "coordinator",
+    latencyMs: 90,
+    clockOffsets: [
+      { peer: "coordinator", offsetMs: 0 },
+      { peer: "edge", offsetMs: 25 },
+    ],
+  };
+
+  it("accepts coordinator and clock offsets", () => {
+    expect(parseTimeSyncInput(JSON.stringify(timeSync))).toEqual(timeSync);
+  });
+
+  it("routes Time Synchronization custom input through the distributed parser", () => {
+    expect(parseCustomInput("timeSync", JSON.stringify(timeSync))).toEqual({
+      type: "distributed",
+      value: timeSync,
+    });
+  });
+
+  it("rejects unknown clock-offset peers", () => {
+    expect(() =>
+      parseTimeSyncInput(
+        JSON.stringify({
+          ...timeSync,
+          clockOffsets: [{ peer: "missing", offsetMs: 10 }],
+        }),
+      ),
+    ).toThrow("unknown peer");
+  });
+
+  it("rejects missing clock offsets", () => {
+    expect(() => parseTimeSyncInput(JSON.stringify({ ...timeSync, clockOffsets: [] }))).toThrow(
+      "clockOffsets",
+    );
   });
 });

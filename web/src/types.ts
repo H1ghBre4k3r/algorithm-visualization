@@ -28,9 +28,9 @@ export type AvailableAlgorithmId =
   | "boyerMoore"
   | "levenshtein"
   | "prefixTrie"
-  | "handshake";
+  | "handshake"
+  | "timeSync";
 export type PlannedAlgorithmId =
-  | "timeSync"
   | "paxos";
 export type AlgorithmId = AvailableAlgorithmId | PlannedAlgorithmId;
 export type InputMode = "example" | "random" | "custom";
@@ -78,7 +78,8 @@ export type AlgorithmOptions =
   | { type: "boyerMoore"; value: BoyerMooreOptions }
   | { type: "levenshtein"; value: LevenshteinOptions }
   | { type: "prefixTrie"; value: PrefixTrieOptions }
-  | { type: "handshake"; value: HandshakeOptions };
+  | { type: "handshake"; value: HandshakeOptions }
+  | { type: "timeSync"; value: TimeSyncOptions };
 
 export interface QuicksortOptions {
   pivotStrategy: "last";
@@ -125,6 +126,7 @@ export type BoyerMooreOptions = Record<string, never>;
 export type LevenshteinOptions = Record<string, never>;
 export type PrefixTrieOptions = Record<string, never>;
 export type HandshakeOptions = Record<string, never>;
+export type TimeSyncOptions = Record<string, never>;
 
 export interface SortInput {
   values: number[];
@@ -162,9 +164,11 @@ export interface SequenceInput {
 
 export interface DistributedInput {
   peers: DistributedPeer[];
-  initiator: string;
-  responder: string;
+  initiator?: string;
+  responder?: string;
+  coordinator?: string | null;
   latencyMs?: number;
+  clockOffsets?: DistributedClockOffset[];
 }
 
 export interface DistributedPeer {
@@ -184,6 +188,11 @@ export interface DistributedMessage {
   label: string;
   sentAt: number;
   deliverAt: number;
+}
+
+export interface DistributedClockOffset {
+  peer: string;
+  offsetMs: number;
 }
 
 export interface Trace {

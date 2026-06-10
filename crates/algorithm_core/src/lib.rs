@@ -36,6 +36,7 @@ pub enum AlgorithmId {
     Levenshtein,
     PrefixTrie,
     Handshake,
+    TimeSync,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -98,6 +99,7 @@ pub enum AlgorithmOptions {
     Levenshtein(LevenshteinOptions),
     PrefixTrie(PrefixTrieOptions),
     Handshake(HandshakeOptions),
+    TimeSync(TimeSyncOptions),
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -243,6 +245,10 @@ pub struct PrefixTrieOptions {}
 #[serde(rename_all = "camelCase")]
 pub struct HandshakeOptions {}
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct TimeSyncOptions {}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SortInput {
@@ -298,10 +304,16 @@ pub struct SequenceInput {
 #[serde(rename_all = "camelCase")]
 pub struct DistributedInput {
     pub peers: Vec<DistributedPeer>,
+    #[serde(default)]
     pub initiator: String,
+    #[serde(default)]
     pub responder: String,
     #[serde(default)]
+    pub coordinator: Option<String>,
+    #[serde(default)]
     pub latency_ms: u32,
+    #[serde(default)]
+    pub clock_offsets: Vec<DistributedClockOffset>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -327,6 +339,13 @@ pub struct DistributedMessage {
     pub label: String,
     pub sent_at: u32,
     pub deliver_at: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DistributedClockOffset {
+    pub peer: String,
+    pub offset_ms: i32,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -615,6 +634,7 @@ pub fn generate_trace(request: AlgorithmRequest) -> Result<Trace, AlgorithmError
         (AlgorithmId::Levenshtein, InputData::Sequence(input)) => trace_levenshtein(input),
         (AlgorithmId::PrefixTrie, InputData::Sequence(input)) => trace_prefix_trie(input),
         (AlgorithmId::Handshake, InputData::Distributed(input)) => trace_handshake(input),
+        (AlgorithmId::TimeSync, InputData::Distributed(input)) => trace_time_sync(input),
         (AlgorithmId::Quicksort, _) => Err(AlgorithmError::new(
             "Quicksort requires sort input with a values array.",
         )),
@@ -704,6 +724,9 @@ pub fn generate_trace(request: AlgorithmRequest) -> Result<Trace, AlgorithmError
         )),
         (AlgorithmId::Handshake, _) => Err(AlgorithmError::new(
             "Handshake Protocol requires distributed input with peers, initiator, and responder.",
+        )),
+        (AlgorithmId::TimeSync, _) => Err(AlgorithmError::new(
+            "Time Synchronization requires distributed input with peers and clock offsets.",
         )),
     }
 }
@@ -998,9 +1021,58 @@ pub fn example_request(algorithm: AlgorithmId) -> AlgorithmRequest {
                 ],
                 initiator: "client".to_string(),
                 responder: "server".to_string(),
+                coordinator: None,
                 latency_ms: 120,
+                clock_offsets: Vec::new(),
             }),
             options: Some(AlgorithmOptions::Handshake(HandshakeOptions::default())),
+        },
+        AlgorithmId::TimeSync => AlgorithmRequest {
+            algorithm,
+            input_mode: InputMode::Example,
+            input: InputData::Distributed(DistributedInput {
+                peers: vec![
+                    DistributedPeer {
+                        id: "coordinator".to_string(),
+                        label: "Coordinator".to_string(),
+                    },
+                    DistributedPeer {
+                        id: "edge-a".to_string(),
+                        label: "Edge A".to_string(),
+                    },
+                    DistributedPeer {
+                        id: "edge-b".to_string(),
+                        label: "Edge B".to_string(),
+                    },
+                    DistributedPeer {
+                        id: "edge-c".to_string(),
+                        label: "Edge C".to_string(),
+                    },
+                ],
+                initiator: String::new(),
+                responder: String::new(),
+                coordinator: Some("coordinator".to_string()),
+                latency_ms: 90,
+                clock_offsets: vec![
+                    DistributedClockOffset {
+                        peer: "coordinator".to_string(),
+                        offset_ms: 0,
+                    },
+                    DistributedClockOffset {
+                        peer: "edge-a".to_string(),
+                        offset_ms: 42,
+                    },
+                    DistributedClockOffset {
+                        peer: "edge-b".to_string(),
+                        offset_ms: -27,
+                    },
+                    DistributedClockOffset {
+                        peer: "edge-c".to_string(),
+                        offset_ms: 15,
+                    },
+                ],
+            }),
+            options: Some(AlgorithmOptions::TimeSync(TimeSyncOptions::default())),
         },
     }
 }
@@ -4879,6 +4951,263 @@ fn validate_distributed_input(input: &DistributedInput) -> Result<(), AlgorithmE
     Ok(())
 }
 
+pub fn trace_time_sync(input: DistributedInput) -> Result<Trace, AlgorithmError> {
+    validate_time_sync_input(&input)?;
+
+    let coordinator = time_sync_coordinator(&input);
+    let latency = input.latency_ms.max(40);
+    let mut tick = 0_u32;
+    let offsets = clock_offset_map(&input);
+    let mut events = Vec::new();
+    let mut messages = Vec::new();
+    let mut states = input
+        .peers
+        .iter()
+        .map(|peer| DistributedPeerState {
+            peer: peer.id.clone(),
+            state: offset_state(*offsets.get(peer.id.as_str()).unwrap_or(&0)),
+        })
+        .collect::<Vec<_>>();
+
+    push_distributed_state(
+        &mut events,
+        &mut states,
+        &coordinator,
+        "coordinator",
+        "Coordinator starts a round of clock synchronization.",
+    );
+
+    for peer in input.peers.iter().filter(|peer| peer.id != coordinator) {
+        let offset = *offsets.get(peer.id.as_str()).unwrap_or(&0);
+        let probe_id = format!("probe-{}", peer.id);
+        push_distributed_message(
+            &mut events,
+            &mut messages,
+            DistributedMessage {
+                id: probe_id.clone(),
+                from: coordinator.clone(),
+                to: peer.id.clone(),
+                label: "TIME?".to_string(),
+                sent_at: tick,
+                deliver_at: tick + latency,
+            },
+            &format!("Coordinator requests a time sample from {}.", peer.label),
+        );
+        events.push(TraceEvent::DistributedDeliver {
+            message_id: probe_id,
+            from: coordinator.clone(),
+            to: peer.id.clone(),
+            label: "TIME?".to_string(),
+            message: format!("{} receives the time sample request.", peer.label),
+        });
+        push_distributed_state(
+            &mut events,
+            &mut states,
+            &peer.id,
+            &offset_state(offset),
+            &format!("{} reports local clock offset {} ms.", peer.label, offset),
+        );
+
+        tick += latency;
+        let report_id = format!("offset-{}", peer.id);
+        push_distributed_message(
+            &mut events,
+            &mut messages,
+            DistributedMessage {
+                id: report_id.clone(),
+                from: peer.id.clone(),
+                to: coordinator.clone(),
+                label: format!("{offset:+}ms"),
+                sent_at: tick,
+                deliver_at: tick + latency,
+            },
+            &format!("{} reports offset {offset:+} ms.", peer.label),
+        );
+        events.push(TraceEvent::DistributedDeliver {
+            message_id: report_id,
+            from: peer.id.clone(),
+            to: coordinator.clone(),
+            label: format!("{offset:+}ms"),
+            message: format!("Coordinator receives {}'s clock offset.", peer.label),
+        });
+
+        tick += latency;
+        let adjust_id = format!("adjust-{}", peer.id);
+        push_distributed_message(
+            &mut events,
+            &mut messages,
+            DistributedMessage {
+                id: adjust_id.clone(),
+                from: coordinator.clone(),
+                to: peer.id.clone(),
+                label: format!("{:+}ms", -offset),
+                sent_at: tick,
+                deliver_at: tick + latency,
+            },
+            &format!(
+                "Coordinator sends adjustment {:+} ms to {}.",
+                -offset, peer.label
+            ),
+        );
+        events.push(TraceEvent::DistributedDeliver {
+            message_id: adjust_id,
+            from: coordinator.clone(),
+            to: peer.id.clone(),
+            label: format!("{:+}ms", -offset),
+            message: format!("{} receives the adjustment.", peer.label),
+        });
+        push_distributed_state(
+            &mut events,
+            &mut states,
+            &peer.id,
+            "synced +0ms",
+            &format!(
+                "{} applies the adjustment and converges to coordinator time.",
+                peer.label
+            ),
+        );
+        tick += latency;
+    }
+
+    push_distributed_state(
+        &mut events,
+        &mut states,
+        &coordinator,
+        "synced +0ms",
+        "Coordinator closes the synchronization round.",
+    );
+
+    let initial_states = input
+        .peers
+        .iter()
+        .map(|peer| DistributedPeerState {
+            peer: peer.id.clone(),
+            state: offset_state(*offsets.get(peer.id.as_str()).unwrap_or(&0)),
+        })
+        .collect::<Vec<_>>();
+    let metadata = TraceMetadata {
+        algorithm_name: "Time Synchronization".to_string(),
+        category: "Distributed".to_string(),
+        input_size: input.peers.len(),
+        event_count: events.len(),
+        result_summary: format!(
+            "Synchronized {} peers to coordinator {}.",
+            input.peers.len(),
+            coordinator
+        ),
+    };
+
+    Ok(Trace {
+        algorithm: AlgorithmId::TimeSync,
+        initial_state: VisualizationState::Distributed {
+            peers: input.peers.clone(),
+            states: initial_states,
+            messages: Vec::new(),
+        },
+        final_state: VisualizationState::Distributed {
+            peers: input.peers,
+            states,
+            messages,
+        },
+        events,
+        metadata,
+    })
+}
+
+fn validate_time_sync_input(input: &DistributedInput) -> Result<(), AlgorithmError> {
+    validate_distributed_peers(input, "Time Synchronization")?;
+    let peer_ids = input
+        .peers
+        .iter()
+        .map(|peer| peer.id.as_str())
+        .collect::<HashSet<_>>();
+    let coordinator = time_sync_coordinator(input);
+    if !peer_ids.contains(coordinator.as_str()) {
+        return Err(AlgorithmError::new(format!(
+            "Coordinator peer '{}' does not exist.",
+            coordinator
+        )));
+    }
+    if input.clock_offsets.is_empty() {
+        return Err(AlgorithmError::new(
+            "Time Synchronization needs clockOffsets for the peers.",
+        ));
+    }
+    let mut seen_offsets = HashSet::new();
+    for offset in &input.clock_offsets {
+        if !peer_ids.contains(offset.peer.as_str()) {
+            return Err(AlgorithmError::new(format!(
+                "Clock offset references unknown peer '{}'.",
+                offset.peer
+            )));
+        }
+        if !seen_offsets.insert(offset.peer.as_str()) {
+            return Err(AlgorithmError::new(format!(
+                "Duplicate clock offset for peer '{}'.",
+                offset.peer
+            )));
+        }
+    }
+    Ok(())
+}
+
+fn validate_distributed_peers(input: &DistributedInput, label: &str) -> Result<(), AlgorithmError> {
+    if input.peers.len() < 2 {
+        return Err(AlgorithmError::new(format!(
+            "{label} needs at least two peers."
+        )));
+    }
+    if input.peers.len() > 8 {
+        return Err(AlgorithmError::new(format!(
+            "{label} supports up to 8 peers for interactive playback."
+        )));
+    }
+    let mut peer_ids = HashSet::new();
+    for peer in &input.peers {
+        if peer.id.trim().is_empty() {
+            return Err(AlgorithmError::new("Peer ids cannot be empty."));
+        }
+        if peer.label.trim().is_empty() {
+            return Err(AlgorithmError::new(format!(
+                "Peer '{}' needs a non-empty label.",
+                peer.id
+            )));
+        }
+        if !peer_ids.insert(peer.id.as_str()) {
+            return Err(AlgorithmError::new(format!(
+                "Duplicate peer id '{}'.",
+                peer.id
+            )));
+        }
+    }
+    Ok(())
+}
+
+fn time_sync_coordinator(input: &DistributedInput) -> String {
+    input
+        .coordinator
+        .as_ref()
+        .filter(|coordinator| !coordinator.trim().is_empty())
+        .cloned()
+        .unwrap_or_else(|| input.peers[0].id.clone())
+}
+
+fn clock_offset_map(input: &DistributedInput) -> HashMap<&str, i32> {
+    input
+        .clock_offsets
+        .iter()
+        .map(|offset| (offset.peer.as_str(), offset.offset_ms))
+        .collect()
+}
+
+fn offset_state(offset: i32) -> String {
+    if offset == 0 {
+        "synced +0ms".to_string()
+    } else {
+        format!("offset {offset:+}ms")
+    }
+}
+
 pub fn trace_levenshtein(input: SequenceInput) -> Result<Trace, AlgorithmError> {
     validate_edit_distance_sequence(&input)?;
 
@@ -6596,7 +6925,9 @@ mod tests {
             ],
             initiator: "a".to_string(),
             responder: "b".to_string(),
+            coordinator: None,
             latency_ms: 80,
+            clock_offsets: Vec::new(),
         })
         .expect("trace");
 
@@ -6639,11 +6970,93 @@ mod tests {
             ],
             initiator: "a".to_string(),
             responder: "a".to_string(),
+            coordinator: None,
             latency_ms: 80,
+            clock_offsets: Vec::new(),
         })
         .expect_err("invalid handshake input");
 
         assert!(error.message().contains("different"));
+    }
+
+    #[test]
+    fn time_sync_trace_converges_peer_offsets() {
+        let trace = trace_time_sync(DistributedInput {
+            peers: vec![
+                DistributedPeer {
+                    id: "c".to_string(),
+                    label: "Coordinator".to_string(),
+                },
+                DistributedPeer {
+                    id: "a".to_string(),
+                    label: "A".to_string(),
+                },
+                DistributedPeer {
+                    id: "b".to_string(),
+                    label: "B".to_string(),
+                },
+            ],
+            initiator: String::new(),
+            responder: String::new(),
+            coordinator: Some("c".to_string()),
+            latency_ms: 70,
+            clock_offsets: vec![
+                DistributedClockOffset {
+                    peer: "c".to_string(),
+                    offset_ms: 0,
+                },
+                DistributedClockOffset {
+                    peer: "a".to_string(),
+                    offset_ms: 35,
+                },
+                DistributedClockOffset {
+                    peer: "b".to_string(),
+                    offset_ms: -18,
+                },
+            ],
+        })
+        .expect("trace");
+
+        let VisualizationState::Distributed {
+            states, messages, ..
+        } = &trace.final_state
+        else {
+            panic!("time sync must finish with distributed state");
+        };
+        assert_eq!(messages.len(), 6);
+        assert!(states.iter().all(|state| state.state == "synced +0ms"));
+        assert!(trace.events.iter().any(|event| matches!(
+            event,
+            TraceEvent::DistributedSend { label, .. } if label == "+18ms"
+        )));
+        assert_valid_distributed_trace(&trace);
+    }
+
+    #[test]
+    fn time_sync_rejects_unknown_offset_peer() {
+        let error = trace_time_sync(DistributedInput {
+            peers: vec![
+                DistributedPeer {
+                    id: "c".to_string(),
+                    label: "Coordinator".to_string(),
+                },
+                DistributedPeer {
+                    id: "a".to_string(),
+                    label: "A".to_string(),
+                },
+            ],
+            initiator: String::new(),
+            responder: String::new(),
+            coordinator: Some("c".to_string()),
+            latency_ms: 70,
+            clock_offsets: vec![DistributedClockOffset {
+                peer: "missing".to_string(),
+                offset_ms: 10,
+            }],
+        })
+        .expect_err("invalid time sync input");
+
+        assert!(error.message().contains("unknown peer"));
     }
 
     #[test]
@@ -6679,6 +7092,7 @@ mod tests {
             AlgorithmId::Levenshtein,
             AlgorithmId::PrefixTrie,
             AlgorithmId::Handshake,
+            AlgorithmId::TimeSync,
         ] {
             let trace = generate_trace(example_request(algorithm)).expect("trace");
             match algorithm {
@@ -6711,7 +7125,9 @@ mod tests {
                 AlgorithmId::Kmp | AlgorithmId::BoyerMoore | AlgorithmId::Levenshtein => {
                     assert_valid_sequence_trace(&trace)
                 }
-                AlgorithmId::Handshake => assert_valid_distributed_trace(&trace),
+                AlgorithmId::Handshake | AlgorithmId::TimeSync => {
+                    assert_valid_distributed_trace(&trace)
+                }
             }
         }
     }
@@ -7060,7 +7476,10 @@ mod tests {
         else {
             panic!("distributed trace must start with a distributed state");
         };
-        assert_eq!(trace.algorithm, AlgorithmId::Handshake);
+        assert!(matches!(
+            trace.algorithm,
+            AlgorithmId::Handshake | AlgorithmId::TimeSync
+        ));
         assert_eq!(trace.metadata.event_count, trace.events.len());
 
         let peer_ids = peers

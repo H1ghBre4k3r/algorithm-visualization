@@ -179,3 +179,21 @@ export function randomDistributedInput(size: number): DistributedInput {
     latencyMs: 80 + Math.floor(Math.random() * 160),
   };
 }
+
+export function randomTimeSyncInput(size: number): DistributedInput {
+  const peerCount = Math.max(3, Math.min(8, size));
+  const peers = Array.from({ length: peerCount }, (_, index) => ({
+    id: index === 0 ? "coordinator" : `peer-${index}`,
+    label: index === 0 ? "Coordinator" : `Peer ${index}`,
+  }));
+
+  return {
+    peers,
+    coordinator: peers[0].id,
+    latencyMs: 60 + Math.floor(Math.random() * 140),
+    clockOffsets: peers.map((peer, index) => ({
+      peer: peer.id,
+      offsetMs: index === 0 ? 0 : Math.floor(Math.random() * 91) - 45,
+    })),
+  };
+}

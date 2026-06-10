@@ -24,6 +24,7 @@ import {
   randomGraphInput,
   randomSequenceInput,
   randomSortInput,
+  randomTimeSyncInput,
   randomTrieInput,
 } from "./lib/random";
 import { parseCustomInput } from "./lib/validators";
@@ -58,6 +59,7 @@ export default function App() {
   const [randomGraph, setRandomGraph] = useState<GraphInput>(() => randomGraphInput(7));
   const [randomDag, setRandomDag] = useState<GraphInput>(() => randomDagInput(7));
   const [randomDistributed, setRandomDistributed] = useState<DistributedInput>(() => randomDistributedInput(4));
+  const [randomTimeSync, setRandomTimeSync] = useState<DistributedInput>(() => randomTimeSyncInput(4));
   const [randomSequence, setRandomSequence] = useState<SequenceInput>(() => randomSequenceInput(32));
   const [randomEditDistance, setRandomEditDistance] = useState<SequenceInput>(() => randomEditDistanceInput(14));
   const [randomTrie, setRandomTrie] = useState<SequenceInput>(() => randomTrieInput(10));
@@ -92,6 +94,7 @@ export default function App() {
     levenshtein: customTemplate("levenshtein"),
     prefixTrie: customTemplate("prefixTrie"),
     handshake: customTemplate("handshake"),
+    timeSync: customTemplate("timeSync"),
   });
   const [trace, setTrace] = useState<Trace | null>(null);
   const [inputError, setInputError] = useState<string | null>(null);
@@ -112,6 +115,7 @@ export default function App() {
         randomGraph,
         randomDag,
         randomDistributed,
+        randomTimeSync,
         randomSequence,
         randomEditDistance,
         randomTrie,
@@ -156,6 +160,7 @@ export default function App() {
     randomGraph,
     randomDag,
     randomDistributed,
+    randomTimeSync,
     randomSequence,
     randomEditDistance,
     randomTrie,
@@ -194,6 +199,8 @@ export default function App() {
       setRandomEditDistance(randomEditDistanceInput(editSize));
     } else if (algorithm === "handshake") {
       setRandomDistributed(randomDistributedInput(graphSize));
+    } else if (algorithm === "timeSync") {
+      setRandomTimeSync(randomTimeSyncInput(graphSize));
     } else if (algorithm === "topologicalSort") {
       setRandomDag(randomDagInput(graphSize));
     } else {
@@ -341,15 +348,19 @@ export default function App() {
                   }}
                 />
               )}
-              {algorithm === "handshake" && (
+              {(algorithm === "handshake" || algorithm === "timeSync") && (
                 <RangeControl
                   label="Peers"
-                  min={2}
+                  min={algorithm === "timeSync" ? 3 : 2}
                   max={8}
                   value={graphSize}
                   onChange={(value) => {
                     setGraphSize(value);
-                    setRandomDistributed(randomDistributedInput(value));
+                    if (algorithm === "timeSync") {
+                      setRandomTimeSync(randomTimeSyncInput(value));
+                    } else {
+                      setRandomDistributed(randomDistributedInput(value));
+                    }
                   }}
                 />
               )}
@@ -476,6 +487,7 @@ function buildRequest(
   randomGraph: GraphInput,
   randomDag: GraphInput,
   randomDistributed: DistributedInput,
+  randomTimeSync: DistributedInput,
   randomSequence: SequenceInput,
   randomEditDistance: SequenceInput,
   randomTrie: SequenceInput,
@@ -532,6 +544,14 @@ function buildRequest(
       algorithm,
       inputMode,
       input: { type: "distributed", value: randomDistributed },
+      options: optionsForAlgorithm(algorithm),
+    };
+  }
+  if (algorithm === "timeSync") {
+    return {
+      algorithm,
+      inputMode,
+      input: { type: "distributed", value: randomTimeSync },
       options: optionsForAlgorithm(algorithm),
     };
   }
@@ -626,6 +646,9 @@ function optionsForAlgorithm(algorithm: AvailableAlgorithmId): AlgorithmRequest[
   if (algorithm === "handshake") {
     return { type: "handshake", value: {} };
   }
+  if (algorithm === "timeSync") {
+    return { type: "timeSync", value: {} };
+  }
   if (algorithm === "bfs") {
     return { type: "bfs", value: { stopAtTarget: true } };
   }
@@ -653,7 +676,7 @@ function optionsForAlgorithm(algorithm: AvailableAlgorithmId): AlgorithmRequest[
 function randomControlLabel(algorithm: AvailableAlgorithmId) {
   if (isSortAlgorithm(algorithm)) return "Values";
   if (algorithm === "prefixTrie") return "Words";
-  if (algorithm === "handshake") return "Peers";
+  if (algorithm === "handshake" || algorithm === "timeSync") return "Peers";
   if (algorithm === "kmp" || algorithm === "boyerMoore" || algorithm === "levenshtein") return "Text";
   return "Nodes";
 }

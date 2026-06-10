@@ -98,6 +98,23 @@ export const exampleHandshakeInput: DistributedInput = {
   latencyMs: 120,
 };
 
+export const exampleTimeSyncInput: DistributedInput = {
+  peers: [
+    { id: "coordinator", label: "Coordinator" },
+    { id: "edge-a", label: "Edge A" },
+    { id: "edge-b", label: "Edge B" },
+    { id: "edge-c", label: "Edge C" },
+  ],
+  coordinator: "coordinator",
+  latencyMs: 90,
+  clockOffsets: [
+    { peer: "coordinator", offsetMs: 0 },
+    { peer: "edge-a", offsetMs: 42 },
+    { peer: "edge-b", offsetMs: -27 },
+    { peer: "edge-c", offsetMs: 15 },
+  ],
+};
+
 export function exampleRequest(algorithm: AvailableAlgorithmId): AlgorithmRequest {
   if (
     algorithm === "quicksort" ||
@@ -213,6 +230,15 @@ export function exampleRequest(algorithm: AvailableAlgorithmId): AlgorithmReques
     };
   }
 
+  if (algorithm === "timeSync") {
+    return {
+      algorithm,
+      inputMode: "example",
+      input: { type: "distributed", value: structuredClone(exampleTimeSyncInput) },
+      options: { type: "timeSync", value: {} },
+    };
+  }
+
   if (algorithm === "bfs" || algorithm === "dfs") {
     return {
       algorithm,
@@ -293,6 +319,8 @@ export function customTemplate(algorithm: AvailableAlgorithmId): string {
           ? examplePrefixTrieInput
         : algorithm === "handshake"
           ? exampleHandshakeInput
+        : algorithm === "timeSync"
+          ? exampleTimeSyncInput
           : algorithm === "topologicalSort"
             ? exampleDagInput
           : exampleGraphInput;

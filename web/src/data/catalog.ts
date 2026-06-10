@@ -264,7 +264,7 @@ export const algorithms: AlgorithmCatalogItem[] = [
     id: "timeSync",
     label: "Time Synchronization",
     category: "distributed",
-    status: "planned",
+    status: "available",
     summary: "Track clock offsets, samples, and convergence over time.",
   },
   {

@@ -138,6 +138,10 @@ export function generateTraceFallback(request: AlgorithmRequest): Trace {
     return traceHandshake(request.input.value);
   }
 
+  if (request.algorithm === "timeSync" && request.input.type === "distributed") {
+    return traceTimeSync(request.input.value);
+  }
+
   throw new Error("Algorithm and input type do not match.");
 }
 
@@ -3446,19 +3450,21 @@ function layoutTrieNodes(nodes: TrieBuildNode[]) {
 function traceHandshake(input: DistributedInput): Trace {
   validateDistributedInput(input);
 
+  const initiator = input.initiator ?? "";
+  const responder = input.responder ?? "";
   const latency = Math.max(40, input.latencyMs ?? 120);
   const events: TraceEvent[] = [];
   const messages: DistributedMessage[] = [];
   const states = input.peers.map<DistributedPeerState>((peer) => ({ peer: peer.id, state: "idle" }));
 
-  pushDistributedState(events, states, input.initiator, "syn-sent", "Initiator opens the handshake and prepares a SYN.");
+  pushDistributedState(events, states, initiator, "syn-sent", "Initiator opens the handshake and prepares a SYN.");
   pushDistributedMessage(
     events,
     messages,
     {
       id: "syn",
-      from: input.initiator,
-      to: input.responder,
+      from: initiator,
+      to: responder,
       label: "SYN",
       sentAt: 0,
       deliverAt: latency,
@@ -3468,20 +3474,20 @@ function traceHandshake(input: DistributedInput): Trace {
   events.push({
     type: "distributedDeliver",
     messageId: "syn",
-    from: input.initiator,
-    to: input.responder,
+    from: initiator,
+    to: responder,
     label: "SYN",
     message: "Responder receives SYN and allocates connection state.",
   });
-  pushDistributedState(events, states, input.responder, "syn-received", "Responder records the half-open connection.");
+  pushDistributedState(events, states, responder, "syn-received", "Responder records the half-open connection.");
 
   pushDistributedMessage(
     events,
     messages,
     {
       id: "synAck",
-      from: input.responder,
-      to: input.initiator,
+      from: responder,
+      to: initiator,
       label: "SYN-ACK",
       sentAt: latency,
       deliverAt: latency * 2,
@@ -3491,20 +3497,20 @@ function traceHandshake(input: DistributedInput): Trace {
   events.push({
     type: "distributedDeliver",
     messageId: "synAck",
-    from: input.responder,
-    to: input.initiator,
+    from: responder,
+    to: initiator,
     label: "SYN-ACK",
     message: "Initiator receives SYN-ACK and confirms the responder is ready.",
   });
-  pushDistributedState(events, states, input.initiator, "established", "Initiator marks the session established.");
+  pushDistributedState(events, states, initiator, "established", "Initiator marks the session established.");
 
   pushDistributedMessage(
     events,
     messages,
     {
       id: "ack",
-      from: input.initiator,
-      to: input.responder,
+      from: initiator,
+      to: responder,
       label: "ACK",
       sentAt: latency * 2,
       deliverAt: latency * 3,
@@ -3514,12 +3520,12 @@ function traceHandshake(input: DistributedInput): Trace {
   events.push({
     type: "distributedDeliver",
     messageId: "ack",
-    from: input.initiator,
-    to: input.responder,
+    from: initiator,
+    to: responder,
     label: "ACK",
     message: "Responder receives ACK and completes the handshake.",
   });
-  pushDistributedState(events, states, input.responder, "established", "Responder marks the session established.");
+  pushDistributedState(events, states, responder, "established", "Responder marks the session established.");
 
   const initialStates = input.peers.map<DistributedPeerState>((peer) => ({ peer: peer.id, state: "idle" }));
   return {
@@ -3542,7 +3548,144 @@ function traceHandshake(input: DistributedInput): Trace {
       category: "Distributed",
       inputSize: input.peers.length,
       eventCount: events.length,
-      resultSummary: `${input.initiator} and ${input.responder} established a session in three messages.`,
+      resultSummary: `${initiator} and ${responder} established a session in three messages.`,
+    },
+  };
+}
+
+function traceTimeSync(input: DistributedInput): Trace {
+  validateTimeSyncInput(input);
+
+  const coordinator = timeSyncCoordinator(input);
+  const latency = Math.max(40, input.latencyMs ?? 120);
+  const events: TraceEvent[] = [];
+  const messages: DistributedMessage[] = [];
+  const offsets = new Map((input.clockOffsets ?? []).map((offset) => [offset.peer, offset.offsetMs]));
+  const states = input.peers.map<DistributedPeerState>((peer) => ({
+    peer: peer.id,
+    state: offsetState(offsets.get(peer.id) ?? 0),
+  }));
+  let tick = 0;
+
+  pushDistributedState(
+    events,
+    states,
+    coordinator,
+    "coordinator",
+    "Coordinator starts a round of clock synchronization.",
+  );
+
+  for (const peer of input.peers.filter((candidate) => candidate.id !== coordinator)) {
+    const offset = offsets.get(peer.id) ?? 0;
+    const probeId = `probe-${peer.id}`;
+    pushDistributedMessage(
+      events,
+      messages,
+      {
+        id: probeId,
+        from: coordinator,
+        to: peer.id,
+        label: "TIME?",
+        sentAt: tick,
+        deliverAt: tick + latency,
+      },
+      `Coordinator requests a time sample from ${peer.label}.`,
+    );
+    events.push({
+      type: "distributedDeliver",
+      messageId: probeId,
+      from: coordinator,
+      to: peer.id,
+      label: "TIME?",
+      message: `${peer.label} receives the time sample request.`,
+    });
+    pushDistributedState(events, states, peer.id, offsetState(offset), `${peer.label} reports local clock offset ${offset} ms.`);
+
+    tick += latency;
+    const reportId = `offset-${peer.id}`;
+    pushDistributedMessage(
+      events,
+      messages,
+      {
+        id: reportId,
+        from: peer.id,
+        to: coordinator,
+        label: signedMs(offset),
+        sentAt: tick,
+        deliverAt: tick + latency,
+      },
+      `${peer.label} reports offset ${signedMs(offset)}.`,
+    );
+    events.push({
+      type: "distributedDeliver",
+      messageId: reportId,
+      from: peer.id,
+      to: coordinator,
+      label: signedMs(offset),
+      message: `Coordinator receives ${peer.label}'s clock offset.`,
+    });
+
+    tick += latency;
+    const adjustment = -offset;
+    const adjustId = `adjust-${peer.id}`;
+    pushDistributedMessage(
+      events,
+      messages,
+      {
+        id: adjustId,
+        from: coordinator,
+        to: peer.id,
+        label: signedMs(adjustment),
+        sentAt: tick,
+        deliverAt: tick + latency,
+      },
+      `Coordinator sends adjustment ${signedMs(adjustment)} to ${peer.label}.`,
+    );
+    events.push({
+      type: "distributedDeliver",
+      messageId: adjustId,
+      from: coordinator,
+      to: peer.id,
+      label: signedMs(adjustment),
+      message: `${peer.label} receives the adjustment.`,
+    });
+    pushDistributedState(
+      events,
+      states,
+      peer.id,
+      "synced +0ms",
+      `${peer.label} applies the adjustment and converges to coordinator time.`,
+    );
+    tick += latency;
+  }
+
+  pushDistributedState(events, states, coordinator, "synced +0ms", "Coordinator closes the synchronization round.");
+
+  const initialStates = input.peers.map<DistributedPeerState>((peer) => ({
+    peer: peer.id,
+    state: offsetState(offsets.get(peer.id) ?? 0),
+  }));
+  return {
+    algorithm: "timeSync",
+    initialState: {
+      type: "distributed",
+      peers: input.peers,
+      states: initialStates,
+      messages: [],
+    },
+    finalState: {
+      type: "distributed",
+      peers: input.peers,
+      states,
+      messages,
+    },
+    events,
+    metadata: {
+      algorithmName: "Time Synchronization",
+      category: "Distributed",
+      inputSize: input.peers.length,
+      eventCount: events.length,
+      resultSummary: `Synchronized ${input.peers.length} peers to coordinator ${coordinator}.`,
     },
   };
 }
@@ -3860,6 +4003,8 @@ function validatePrefixTrie(input: SequenceInput) {
 }
 
 function validateDistributedInput(input: DistributedInput) {
+  const initiator = input.initiator ?? "";
+  const responder = input.responder ?? "";
   if (input.peers.length < 2) {
     throw new Error("Handshake Protocol needs at least two peers.");
   }
@@ -3880,15 +4025,73 @@ function validateDistributedInput(input: DistributedInput) {
     }
     peerIds.add(peer.id);
   }
-  if (!peerIds.has(input.initiator)) {
-    throw new Error(`Initiator peer '${input.initiator}' does not exist.`);
+  if (!peerIds.has(initiator)) {
+    throw new Error(`Initiator peer '${initiator}' does not exist.`);
   }
-  if (!peerIds.has(input.responder)) {
-    throw new Error(`Responder peer '${input.responder}' does not exist.`);
+  if (!peerIds.has(responder)) {
+    throw new Error(`Responder peer '${responder}' does not exist.`);
   }
-  if (input.initiator === input.responder) {
+  if (initiator === responder) {
     throw new Error("Initiator and responder must be different peers.");
   }
+}
+
+function validateTimeSyncInput(input: DistributedInput) {
+  validateDistributedPeers(input, "Time Synchronization");
+  const peerIds = new Set(input.peers.map((peer) => peer.id));
+  const coordinator = timeSyncCoordinator(input);
+  if (!peerIds.has(coordinator)) {
+    throw new Error(`Coordinator peer '${coordinator}' does not exist.`);
+  }
+
+  const offsets = input.clockOffsets ?? [];
+  if (offsets.length === 0) {
+    throw new Error("Time Synchronization needs clockOffsets for the peers.");
+  }
+  const seen = new Set<string>();
+  for (const offset of offsets) {
+    if (!peerIds.has(offset.peer)) {
+      throw new Error(`Clock offset references unknown peer '${offset.peer}'.`);
+    }
+    if (seen.has(offset.peer)) {
+      throw new Error(`Duplicate clock offset for peer '${offset.peer}'.`);
+    }
+    seen.add(offset.peer);
+  }
+}
+
+function validateDistributedPeers(input: DistributedInput, label: string) {
+  if (input.peers.length < 2) {
+    throw new Error(`${label} needs at least two peers.`);
+  }
+  if (input.peers.length > 8) {
+    throw new Error(`${label} is capped at 8 peers for interactive playback.`);
+  }
+  const peerIds = new Set<string>();
+  for (const peer of input.peers) {
+    if (peer.id.trim() === "") {
+      throw new Error("Peer ids cannot be empty.");
+    }
+    if (peer.label.trim() === "") {
+      throw new Error(`Peer '${peer.id}' needs a non-empty label.`);
+    }
+    if (peerIds.has(peer.id)) {
+      throw new Error(`Duplicate peer id '${peer.id}'.`);
+    }
+    peerIds.add(peer.id);
+  }
+}
+
+function timeSyncCoordinator(input: DistributedInput) {
+  return input.coordinator?.trim() ? input.coordinator : input.peers[0].id;
+}
+
+function offsetState(offset: number) {
+  return offset === 0 ? "synced +0ms" : `offset ${signedMs(offset)}`;
+}
+
+function signedMs(value: number) {
+  return `${value >= 0 ? "+" : ""}${value}ms`;
 }
 
 function validateEditDistance(input: SequenceInput) {
