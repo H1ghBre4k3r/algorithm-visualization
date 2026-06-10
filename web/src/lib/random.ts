@@ -53,6 +53,56 @@ export function randomGraphInput(size: number): GraphInput {
   };
 }
 
+export function randomDagInput(size: number): GraphInput {
+  const nodeCount = Math.max(4, Math.min(12, size));
+  const nodes = Array.from({ length: nodeCount }, (_, index) => {
+    const column = nodeCount === 1 ? 0 : index / (nodeCount - 1);
+    const lane = index % 3;
+    return {
+      id: String.fromCharCode(65 + index),
+      label: String.fromCharCode(65 + index),
+      x: 0.1 + column * 0.8,
+      y: [0.28, 0.5, 0.72][lane] + Math.sin(index * 1.9) * 0.035,
+    };
+  });
+
+  const edges = [];
+  for (let index = 0; index < nodeCount - 1; index += 1) {
+    edges.push({
+      id: `${nodes[index].id}${nodes[index + 1].id}`,
+      from: nodes[index].id,
+      to: nodes[index + 1].id,
+      weight: 1 + Math.floor(Math.random() * 9),
+      directed: true,
+    });
+  }
+
+  for (let fromIndex = 0; fromIndex < nodeCount - 2; fromIndex += 1) {
+    const maxJump = Math.min(nodeCount - fromIndex - 1, 4);
+    const jump = 2 + Math.floor(Math.random() * Math.max(1, maxJump - 1));
+    const toIndex = fromIndex + jump;
+    const from = nodes[fromIndex].id;
+    const to = nodes[toIndex].id;
+    const id = `${from}${to}`;
+    if (!edges.some((edge) => edge.id === id)) {
+      edges.push({
+        id,
+        from,
+        to,
+        weight: 1 + Math.floor(Math.random() * 9),
+        directed: true,
+      });
+    }
+  }
+
+  return {
+    nodes,
+    edges,
+    source: nodes[0].id,
+    target: nodes[nodes.length - 1].id,
+  };
+}
+
 export function randomSequenceInput(size: number): SequenceInput {
   const alphabet = ["a", "b", "c", "d"];
   const patternLength = Math.max(3, Math.min(8, Math.floor(size / 4)));

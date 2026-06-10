@@ -47,7 +47,11 @@ export function parseCustomInput(algorithm: AvailableAlgorithmId, raw: string): 
   if (algorithm === "levenshtein") {
     return { type: "sequence", value: parseEditDistanceInput(raw) };
   }
-  return { type: "graph", value: parseGraphInput(raw) };
+  const graphInput = parseGraphInput(raw);
+  if (algorithm === "topologicalSort") {
+    validateDirectedAcyclicGraph(graphInput);
+  }
+  return { type: "graph", value: graphInput };
 }
 
 export function parseSortInput(raw: string): SortInput {
@@ -212,6 +216,41 @@ function parseEdge(
     weight,
     directed: Boolean(edge.directed),
   };
+}
+
+function validateDirectedAcyclicGraph(input: GraphInput) {
+  const undirectedEdge = input.edges.find((edge) => !edge.directed);
+  if (undirectedEdge) {
+    throw new InputValidationError(
+      `Topological Sort needs every edge to be directed; edge '${undirectedEdge.id}' is undirected.`,
+    );
+  }
+
+  const nodeOrder = input.nodes.map((node) => node.id);
+  const indegree = new Map(nodeOrder.map((node) => [node, 0]));
+  const outgoing = new Map<string, GraphEdge[]>(nodeOrder.map((node) => [node, []]));
+  for (const edge of input.edges) {
+    indegree.set(edge.to, (indegree.get(edge.to) ?? 0) + 1);
+    outgoing.get(edge.from)?.push(edge);
+  }
+
+  const queue = nodeOrder.filter((node) => (indegree.get(node) ?? 0) === 0);
+  let visited = 0;
+  while (queue.length > 0) {
+    const node = queue.shift()!;
+    visited += 1;
+    for (const edge of outgoing.get(node) ?? []) {
+      const next = Math.max(0, (indegree.get(edge.to) ?? 0) - 1);
+      indegree.set(edge.to, next);
+      if (next === 0) {
+        queue.push(edge.to);
+      }
+    }
+  }
+
+  if (visited !== nodeOrder.length) {
+    throw new InputValidationError("Topological Sort needs an acyclic directed graph.");
+  }
 }
 
 function parseJson(raw: string): unknown {

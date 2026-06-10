@@ -219,6 +219,13 @@ export const algorithms: AlgorithmCatalogItem[] = [
     summary: "Scan edges by weight and join components without cycles.",
   },
   {
+    id: "topologicalSort",
+    label: "Topological Sort",
+    category: "graph",
+    status: "available",
+    summary: "Remove dependencies to produce a valid directed acyclic order.",
+  },
+  {
     id: "kmp",
     label: "Knuth-Morris-Pratt",
     category: "sequence",

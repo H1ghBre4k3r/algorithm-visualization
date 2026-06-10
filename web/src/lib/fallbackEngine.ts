@@ -111,6 +111,10 @@ export function generateTraceFallback(request: AlgorithmRequest): Trace {
     return traceKruskal(request.input.value);
   }
 
+  if (request.algorithm === "topologicalSort" && request.input.type === "graph") {
+    return traceTopologicalSort(request.input.value);
+  }
+
   if (request.algorithm === "kmp" && request.input.type === "sequence") {
     return traceKmp(request.input.value);
   }
@@ -2787,6 +2791,125 @@ function traceKruskal(input: GraphInput): Trace {
   };
 }
 
+function traceTopologicalSort(input: GraphInput): Trace {
+  validateGraph(input);
+  validateTopologicalGraph(input);
+
+  const nodeOrder = input.nodes.map((node) => node.id);
+  const indegree = new Map(nodeOrder.map((node) => [node, 0]));
+  const outgoing = new Map<string, GraphEdge[]>(nodeOrder.map((node) => [node, []]));
+  for (const edge of input.edges) {
+    indegree.set(edge.to, (indegree.get(edge.to) ?? 0) + 1);
+    outgoing.get(edge.from)?.push(edge);
+  }
+
+  const events: TraceEvent[] = [];
+  const queue: string[] = [];
+  for (const node of nodeOrder) {
+    if ((indegree.get(node) ?? 0) === 0) {
+      queue.push(node);
+      events.push({
+        type: "graphVisit",
+        node,
+        distance: 0,
+        message: `Node ${node} starts with indegree 0.`,
+      });
+    }
+  }
+
+  const order: string[] = [];
+  while (queue.length > 0) {
+    const node = queue.shift()!;
+    order.push(node);
+    events.push({
+      type: "graphSettle",
+      node,
+      distance: order.length,
+      message: `Place node ${node} at topological position ${order.length}.`,
+    });
+
+    for (const edge of outgoing.get(node) ?? []) {
+      events.push({
+        type: "graphConsiderEdge",
+        edgeId: edge.id,
+        from: edge.from,
+        to: edge.to,
+        weight: edge.weight,
+        message: `Remove dependency from ${edge.from} to ${edge.to}.`,
+      });
+
+      const previous = indegree.get(edge.to) ?? 0;
+      const next = Math.max(0, previous - 1);
+      indegree.set(edge.to, next);
+      events.push({
+        type: "graphRelaxEdge",
+        edgeId: edge.id,
+        from: edge.from,
+        to: edge.to,
+        weight: edge.weight,
+        previousDistance: previous,
+        newDistance: next,
+        improved: next === 0,
+        message: `Indegree for ${edge.to} drops from ${previous} to ${next}.`,
+      });
+
+      if (next === 0) {
+        queue.push(edge.to);
+        events.push({
+          type: "graphVisit",
+          node: edge.to,
+          distance: order.length,
+          message: `Node ${edge.to} is ready; all prerequisites are settled.`,
+        });
+      }
+    }
+  }
+
+  if (order.length !== nodeOrder.length) {
+    throw new Error("Topological Sort requires an acyclic directed graph.");
+  }
+
+  events.push({
+    type: "graphPath",
+    nodes: order,
+    totalDistance: order.length,
+    message: `Topological order: ${order.join(" -> ")}.`,
+  });
+
+  const initialDistances = nodeOrder.map<NodeDistance>((node) => ({ node, distance: null }));
+  const finalDistances = order.map<NodeDistance>((node, index) => ({ node, distance: index + 1 }));
+
+  return {
+    algorithm: "topologicalSort",
+    initialState: {
+      type: "graph",
+      nodes: input.nodes,
+      edges: input.edges,
+      source: input.source,
+      target: input.target ?? null,
+      distances: initialDistances,
+      path: [],
+    },
+    finalState: {
+      type: "graph",
+      nodes: input.nodes,
+      edges: input.edges,
+      source: input.source,
+      target: input.target ?? null,
+      distances: finalDistances,
+      path: order,
+    },
+    events,
+    metadata: {
+      algorithmName: "Topological Sort",
+      category: "Graph",
+      inputSize: input.nodes.length,
+      eventCount: events.length,
+      resultSummary: `Ordered ${order.length} nodes.`,
+    },
+  };
+}
+
 function traceKmp(input: SequenceInput): Trace {
   validateSequence(input);
 
@@ -3167,6 +3290,16 @@ function validateMstGraph(input: GraphInput) {
   const directedEdge = input.edges.find((edge) => edge.directed);
   if (directedEdge) {
     throw new Error(`MST algorithms require undirected edges; edge '${directedEdge.id}' is directed.`);
+  }
+}
+
+function validateTopologicalGraph(input: GraphInput) {
+  if (input.edges.length === 0) {
+    throw new Error("Topological Sort requires at least one directed edge.");
+  }
+  const undirectedEdge = input.edges.find((edge) => !edge.directed);
+  if (undirectedEdge) {
+    throw new Error(`Topological Sort requires directed edges; edge '${undirectedEdge.id}' is undirected.`);
   }
 }
 

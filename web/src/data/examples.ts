@@ -37,6 +37,28 @@ export const exampleGraphInput: GraphInput = {
   target: "F",
 };
 
+export const exampleDagInput: GraphInput = {
+  nodes: [
+    { id: "A", label: "A", x: 0.12, y: 0.5 },
+    { id: "B", label: "B", x: 0.32, y: 0.24 },
+    { id: "C", label: "C", x: 0.32, y: 0.72 },
+    { id: "D", label: "D", x: 0.56, y: 0.32 },
+    { id: "E", label: "E", x: 0.58, y: 0.74 },
+    { id: "F", label: "F", x: 0.86, y: 0.52 },
+  ],
+  edges: [
+    { id: "AB", from: "A", to: "B", weight: 1, directed: true },
+    { id: "AC", from: "A", to: "C", weight: 1, directed: true },
+    { id: "BD", from: "B", to: "D", weight: 1, directed: true },
+    { id: "CD", from: "C", to: "D", weight: 1, directed: true },
+    { id: "CE", from: "C", to: "E", weight: 1, directed: true },
+    { id: "DF", from: "D", to: "F", weight: 1, directed: true },
+    { id: "EF", from: "E", to: "F", weight: 1, directed: true },
+  ],
+  source: "A",
+  target: "F",
+};
+
 export const exampleSequenceInput: SequenceInput = {
   text: "ababcabcabababd",
   pattern: "ababd",
@@ -159,6 +181,15 @@ export function exampleRequest(algorithm: AvailableAlgorithmId): AlgorithmReques
     };
   }
 
+  if (algorithm === "topologicalSort") {
+    return {
+      algorithm,
+      inputMode: "example",
+      input: { type: "graph", value: structuredClone(exampleDagInput) },
+      options: { type: "topologicalSort", value: {} },
+    };
+  }
+
   return {
     algorithm,
     inputMode: "example",
@@ -200,6 +231,8 @@ export function customTemplate(algorithm: AvailableAlgorithmId): string {
         ? exampleSequenceInput
         : algorithm === "levenshtein"
           ? exampleEditDistanceInput
+          : algorithm === "topologicalSort"
+            ? exampleDagInput
           : exampleGraphInput;
   return JSON.stringify(input, null, 2);
 }

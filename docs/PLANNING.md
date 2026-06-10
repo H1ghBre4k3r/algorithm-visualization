@@ -5,7 +5,7 @@
 The current milestone establishes the website architecture and proves the trace model across three algorithm families:
 
 - Sorting: Quicksort, Insertion Sort, Bubble Sort, Cocktail Shaker Sort, Odd-Even Sort, Pancake Sort, Quickselect, Bitonic Sort, Selection Sort, Shell Sort, Counting Sort, Radix Sort, Bucket Sort, Comb Sort, Mergesort, Timsort, Heap Sort.
-- Graph: Breadth-first search, depth-first search, Dijkstra, Bellman-Ford, A*, Prim MST, Kruskal.
+- Graph: Breadth-first search, depth-first search, Dijkstra, Bellman-Ford, A*, Prim MST, Kruskal, Topological Sort.
 - Sequence: Knuth-Morris-Pratt, Levenshtein Distance.
 - Input modes: example, random, custom JSON.
 - Rendering: Canvas 2D with real-time playback controls.
@@ -36,7 +36,7 @@ Before an algorithm is marked live in the catalog, it must have:
    - Reuse the array renderer where possible, adding events only when the animation needs them.
 
 3. Expand graph algorithms.
-   - Add topological sort, grid pathfinding, and strongly connected components.
+   - Add grid pathfinding and strongly connected components.
    - Introduce graph input presets for sparse, dense, directed, and grid-style graphs.
 
 4. Add sequence processing.
@@ -49,7 +49,7 @@ Before an algorithm is marked live in the catalog, it must have:
 
 ## Current Gaps
 
-- Only Quicksort, Insertion Sort, Bubble Sort, Cocktail Shaker Sort, Odd-Even Sort, Pancake Sort, Quickselect, Bitonic Sort, Selection Sort, Shell Sort, Counting Sort, Radix Sort, Bucket Sort, Comb Sort, Mergesort, Timsort, Heap Sort, Breadth-first search, depth-first search, Dijkstra, Bellman-Ford, A*, Prim MST, Kruskal, Knuth-Morris-Pratt, and Levenshtein Distance are live.
+- Only Quicksort, Insertion Sort, Bubble Sort, Cocktail Shaker Sort, Odd-Even Sort, Pancake Sort, Quickselect, Bitonic Sort, Selection Sort, Shell Sort, Counting Sort, Radix Sort, Bucket Sort, Comb Sort, Mergesort, Timsort, Heap Sort, Breadth-first search, depth-first search, Dijkstra, Bellman-Ford, A*, Prim MST, Kruskal, Topological Sort, Knuth-Morris-Pratt, and Levenshtein Distance are live.
 - Planned algorithms are visible in the catalog but intentionally do not generate traces yet.
 - Browser verification is manual right now.
 - The frontend can run without generated WASM through a TypeScript fallback, but full Rust/WASM browser execution still requires `wasm-pack`.

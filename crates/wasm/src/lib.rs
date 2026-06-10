@@ -39,6 +39,7 @@ pub fn example_request_for(algorithm: &str) -> Result<JsValue, JsValue> {
         "aStar" => AlgorithmId::AStar,
         "primMst" => AlgorithmId::PrimMst,
         "kruskal" => AlgorithmId::Kruskal,
+        "topologicalSort" => AlgorithmId::TopologicalSort,
         "kmp" => AlgorithmId::Kmp,
         "levenshtein" => AlgorithmId::Levenshtein,
         other => {

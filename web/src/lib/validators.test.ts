@@ -131,6 +131,67 @@ describe("parseGraphInput", () => {
       ),
     ).toThrow("unknown node");
   });
+
+  it("routes topological sort custom input through directed DAG validation", () => {
+    expect(
+      parseCustomInput(
+        "topologicalSort",
+        JSON.stringify({
+          nodes: [
+            { id: "A", label: "A", x: 0.2, y: 0.3 },
+            { id: "B", label: "B", x: 0.5, y: 0.5 },
+            { id: "C", label: "C", x: 0.8, y: 0.7 },
+          ],
+          edges: [
+            { id: "AB", from: "A", to: "B", weight: 1, directed: true },
+            { id: "BC", from: "B", to: "C", weight: 1, directed: true },
+          ],
+          source: "A",
+          target: "C",
+        }),
+      ),
+    ).toMatchObject({
+      type: "graph",
+      value: {
+        edges: [
+          { id: "AB", directed: true },
+          { id: "BC", directed: true },
+        ],
+      },
+    });
+  });
+
+  it("rejects topological sort input with undirected edges", () => {
+    expect(() =>
+      parseCustomInput(
+        "topologicalSort",
+        JSON.stringify({
+          ...graph,
+          edges: [{ id: "AB", from: "A", to: "B", weight: 3 }],
+        }),
+      ),
+    ).toThrow("directed");
+  });
+
+  it("rejects topological sort input with cycles", () => {
+    expect(() =>
+      parseCustomInput(
+        "topologicalSort",
+        JSON.stringify({
+          nodes: [
+            { id: "A", label: "A", x: 0.2, y: 0.3 },
+            { id: "B", label: "B", x: 0.7, y: 0.6 },
+          ],
+          edges: [
+            { id: "AB", from: "A", to: "B", weight: 1, directed: true },
+            { id: "BA", from: "B", to: "A", weight: 1, directed: true },
+          ],
+          source: "A",
+          target: "B",
+        }),
+      ),
+    ).toThrow("acyclic");
+  });
 });
 
 describe("parseKmpInput", () => {

@@ -67,7 +67,8 @@ export function drawTrace(canvas: HTMLCanvasElement, trace: Trace, step: number)
       trace.algorithm === "bellmanFord" ||
       trace.algorithm === "aStar" ||
       trace.algorithm === "primMst" ||
-      trace.algorithm === "kruskal") &&
+      trace.algorithm === "kruskal" ||
+      trace.algorithm === "topologicalSort") &&
     trace.initialState.type === "graph"
   ) {
     drawGraphTrace(context, width, height, trace, step);

@@ -23,6 +23,7 @@ export type AvailableAlgorithmId =
   | "aStar"
   | "primMst"
   | "kruskal"
+  | "topologicalSort"
   | "kmp"
   | "levenshtein";
 export type PlannedAlgorithmId =
@@ -71,6 +72,7 @@ export type AlgorithmOptions =
   | { type: "aStar"; value: AStarOptions }
   | { type: "primMst"; value: PrimMstOptions }
   | { type: "kruskal"; value: KruskalOptions }
+  | { type: "topologicalSort"; value: TopologicalSortOptions }
   | { type: "kmp"; value: KmpOptions }
   | { type: "levenshtein"; value: LevenshteinOptions };
 
@@ -113,6 +115,7 @@ export interface AStarOptions {
 }
 export type PrimMstOptions = Record<string, never>;
 export type KruskalOptions = Record<string, never>;
+export type TopologicalSortOptions = Record<string, never>;
 export type KmpOptions = Record<string, never>;
 export type LevenshteinOptions = Record<string, never>;
 

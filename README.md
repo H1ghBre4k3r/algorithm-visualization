@@ -28,6 +28,7 @@ Browser-first algorithm visualization MVP with a Rust trace core, WASM bindings,
 - A* trace generation and heuristic weighted-graph visualization.
 - Prim minimum-spanning-tree trace generation and graph visualization.
 - Kruskal minimum-spanning-tree trace generation and graph visualization.
+- Topological Sort trace generation and directed-DAG visualization.
 - Knuth-Morris-Pratt trace generation and sequence/prefix-table visualization.
 - Levenshtein Distance trace generation and dynamic-programming table visualization.
 - Example, random, and custom JSON inputs.

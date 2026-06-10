@@ -17,7 +17,7 @@ import {
 } from "./data/catalog";
 import { customTemplate, exampleRequest } from "./data/examples";
 import { generateTrace } from "./lib/engine";
-import { randomEditDistanceInput, randomGraphInput, randomSequenceInput, randomSortInput } from "./lib/random";
+import { randomDagInput, randomEditDistanceInput, randomGraphInput, randomSequenceInput, randomSortInput } from "./lib/random";
 import { parseCustomInput } from "./lib/validators";
 import { drawTrace } from "./render/canvasRenderer";
 import type {
@@ -47,6 +47,7 @@ export default function App() {
   const [editSize, setEditSize] = useState(14);
   const [randomSort, setRandomSort] = useState<SortInput>(() => randomSortInput(18));
   const [randomGraph, setRandomGraph] = useState<GraphInput>(() => randomGraphInput(7));
+  const [randomDag, setRandomDag] = useState<GraphInput>(() => randomDagInput(7));
   const [randomSequence, setRandomSequence] = useState<SequenceInput>(() => randomSequenceInput(32));
   const [randomEditDistance, setRandomEditDistance] = useState<SequenceInput>(() => randomEditDistanceInput(14));
   const [customJson, setCustomJson] = useState<Record<AvailableAlgorithmId, string>>({
@@ -74,6 +75,7 @@ export default function App() {
     aStar: customTemplate("aStar"),
     primMst: customTemplate("primMst"),
     kruskal: customTemplate("kruskal"),
+    topologicalSort: customTemplate("topologicalSort"),
     kmp: customTemplate("kmp"),
     levenshtein: customTemplate("levenshtein"),
   });
@@ -94,6 +96,7 @@ export default function App() {
         inputMode,
         randomSort,
         randomGraph,
+        randomDag,
         randomSequence,
         randomEditDistance,
         customJson[algorithm],
@@ -130,7 +133,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [algorithm, inputMode, randomSort, randomGraph, randomSequence, randomEditDistance, customJson]);
+  }, [algorithm, inputMode, randomSort, randomGraph, randomDag, randomSequence, randomEditDistance, customJson]);
 
   useEffect(() => {
     if (!isPlaying || !trace) return;
@@ -160,6 +163,8 @@ export default function App() {
       setRandomSequence(randomSequenceInput(sequenceSize));
     } else if (algorithm === "levenshtein") {
       setRandomEditDistance(randomEditDistanceInput(editSize));
+    } else if (algorithm === "topologicalSort") {
+      setRandomDag(randomDagInput(graphSize));
     } else {
       setRandomGraph(randomGraphInput(graphSize));
     }
@@ -297,7 +302,11 @@ export default function App() {
                   value={graphSize}
                   onChange={(value) => {
                     setGraphSize(value);
-                    setRandomGraph(randomGraphInput(value));
+                    if (algorithm === "topologicalSort") {
+                      setRandomDag(randomDagInput(value));
+                    } else {
+                      setRandomGraph(randomGraphInput(value));
+                    }
                   }}
                 />
               )}
@@ -418,6 +427,7 @@ function buildRequest(
   inputMode: InputMode,
   randomSort: SortInput,
   randomGraph: GraphInput,
+  randomDag: GraphInput,
   randomSequence: SequenceInput,
   randomEditDistance: SequenceInput,
   customJson: string,
@@ -465,6 +475,14 @@ function buildRequest(
       algorithm,
       inputMode,
       input: { type: "graph", value: randomGraph },
+      options: optionsForAlgorithm(algorithm),
+    };
+  }
+  if (algorithm === "topologicalSort") {
+    return {
+      algorithm,
+      inputMode,
+      input: { type: "graph", value: randomDag },
       options: optionsForAlgorithm(algorithm),
     };
   }
@@ -546,6 +564,9 @@ function optionsForAlgorithm(algorithm: AvailableAlgorithmId): AlgorithmRequest[
   if (algorithm === "kruskal") {
     return { type: "kruskal", value: {} };
   }
+  if (algorithm === "topologicalSort") {
+    return { type: "topologicalSort", value: {} };
+  }
   if (algorithm === "bellmanFord") {
     return { type: "bellmanFord", value: {} };
   }
@@ -600,7 +621,8 @@ function isGraphAlgorithm(algorithm: AvailableAlgorithmId) {
     algorithm === "bellmanFord" ||
     algorithm === "aStar" ||
     algorithm === "primMst" ||
-    algorithm === "kruskal"
+    algorithm === "kruskal" ||
+    algorithm === "topologicalSort"
   );
 }
 

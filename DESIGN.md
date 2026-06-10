@@ -58,6 +58,7 @@ Reference: https://impeccable.style
   - Relaxation pass updates: amber edge focus with blue distance labels.
   - Heuristic pathfinding: amber frontier with blue best-known distances.
   - Cycle rejection: red edge focus.
+  - Topological order: amber dependency removals with green settled ordering path.
   - Final path or selected tree edges: green.
 - Sequence:
   - Active comparison: amber.

@@ -30,6 +30,7 @@ pub enum AlgorithmId {
     AStar,
     PrimMst,
     Kruskal,
+    TopologicalSort,
     Kmp,
     Levenshtein,
 }
@@ -87,6 +88,7 @@ pub enum AlgorithmOptions {
     AStar(AStarOptions),
     PrimMst(PrimMstOptions),
     Kruskal(KruskalOptions),
+    TopologicalSort(TopologicalSortOptions),
     Kmp(KmpOptions),
     Levenshtein(LevenshteinOptions),
 }
@@ -209,6 +211,10 @@ pub struct PrimMstOptions {}
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct KruskalOptions {}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct TopologicalSortOptions {}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
@@ -513,6 +519,7 @@ pub fn generate_trace(request: AlgorithmRequest) -> Result<Trace, AlgorithmError
         }
         (AlgorithmId::PrimMst, InputData::Graph(input)) => trace_prim_mst(input),
         (AlgorithmId::Kruskal, InputData::Graph(input)) => trace_kruskal(input),
+        (AlgorithmId::TopologicalSort, InputData::Graph(input)) => trace_topological_sort(input),
         (AlgorithmId::Kmp, InputData::Sequence(input)) => trace_kmp(input),
         (AlgorithmId::Levenshtein, InputData::Sequence(input)) => trace_levenshtein(input),
         (AlgorithmId::Quicksort, _) => Err(AlgorithmError::new(
@@ -586,6 +593,9 @@ pub fn generate_trace(request: AlgorithmRequest) -> Result<Trace, AlgorithmError
         )),
         (AlgorithmId::Kruskal, _) => Err(AlgorithmError::new(
             "Kruskal requires undirected graph input with nodes and weighted edges.",
+        )),
+        (AlgorithmId::TopologicalSort, _) => Err(AlgorithmError::new(
+            "Topological Sort requires directed graph input with nodes and edges.",
         )),
         (AlgorithmId::Kmp, _) => Err(AlgorithmError::new(
             "Knuth-Morris-Pratt requires sequence input with text and pattern.",
@@ -810,6 +820,14 @@ pub fn example_request(algorithm: AlgorithmId) -> AlgorithmRequest {
             input_mode: InputMode::Example,
             input: InputData::Graph(example_graph()),
             options: Some(AlgorithmOptions::Kruskal(KruskalOptions::default())),
+        },
+        AlgorithmId::TopologicalSort => AlgorithmRequest {
+            algorithm,
+            input_mode: InputMode::Example,
+            input: InputData::Graph(example_dag()),
+            options: Some(AlgorithmOptions::TopologicalSort(
+                TopologicalSortOptions::default(),
+            )),
         },
         AlgorithmId::Kmp => AlgorithmRequest {
             algorithm,
@@ -3791,6 +3809,149 @@ pub fn trace_kruskal(input: GraphInput) -> Result<Trace, AlgorithmError> {
     })
 }
 
+pub fn trace_topological_sort(input: GraphInput) -> Result<Trace, AlgorithmError> {
+    validate_graph(&input)?;
+    validate_topological_graph(&input)?;
+
+    let node_order = input
+        .nodes
+        .iter()
+        .map(|node| node.id.clone())
+        .collect::<Vec<_>>();
+    let mut indegree = node_order
+        .iter()
+        .map(|node| (node.clone(), 0_u32))
+        .collect::<HashMap<_, _>>();
+    let mut outgoing = node_order
+        .iter()
+        .map(|node| (node.clone(), Vec::<GraphEdge>::new()))
+        .collect::<HashMap<_, _>>();
+
+    for edge in &input.edges {
+        *indegree
+            .get_mut(&edge.to)
+            .expect("edge endpoints were validated") += 1;
+        outgoing
+            .get_mut(&edge.from)
+            .expect("edge endpoints were validated")
+            .push(edge.clone());
+    }
+
+    let mut queue = VecDeque::new();
+    let mut events = Vec::new();
+    for node in &node_order {
+        if indegree.get(node).copied().unwrap_or_default() == 0 {
+            queue.push_back(node.clone());
+            events.push(TraceEvent::GraphVisit {
+                node: node.clone(),
+                distance: 0,
+                message: format!("Node {node} starts with indegree 0."),
+            });
+        }
+    }
+
+    let mut order = Vec::new();
+    while let Some(node) = queue.pop_front() {
+        order.push(node.clone());
+        events.push(TraceEvent::GraphSettle {
+            node: node.clone(),
+            distance: order.len() as u32,
+            message: format!("Place node {node} at topological position {}.", order.len()),
+        });
+
+        for edge in outgoing.get(&node).cloned().unwrap_or_default() {
+            events.push(TraceEvent::GraphConsiderEdge {
+                edge_id: edge.id.clone(),
+                from: edge.from.clone(),
+                to: edge.to.clone(),
+                weight: edge.weight,
+                message: format!("Remove dependency from {} to {}.", edge.from, edge.to),
+            });
+
+            let previous = indegree.get(&edge.to).copied().unwrap_or_default();
+            let next = previous.saturating_sub(1);
+            indegree.insert(edge.to.clone(), next);
+            events.push(TraceEvent::GraphRelaxEdge {
+                edge_id: edge.id.clone(),
+                from: edge.from.clone(),
+                to: edge.to.clone(),
+                weight: edge.weight,
+                previous_distance: Some(previous),
+                new_distance: Some(next),
+                improved: next == 0,
+                message: format!("Indegree for {} drops from {previous} to {next}.", edge.to),
+            });
+
+            if next == 0 {
+                queue.push_back(edge.to.clone());
+                events.push(TraceEvent::GraphVisit {
+                    node: edge.to.clone(),
+                    distance: order.len() as u32,
+                    message: format!("Node {} is ready; all prerequisites are settled.", edge.to),
+                });
+            }
+        }
+    }
+
+    if order.len() != node_order.len() {
+        return Err(AlgorithmError::new(
+            "Topological Sort requires an acyclic directed graph.",
+        ));
+    }
+
+    events.push(TraceEvent::GraphPath {
+        nodes: order.clone(),
+        total_distance: Some(order.len() as u32),
+        message: format!("Topological order: {}.", order.join(" -> ")),
+    });
+
+    let initial_distances = node_order
+        .iter()
+        .map(|node| NodeDistance {
+            node: node.clone(),
+            distance: None,
+        })
+        .collect::<Vec<_>>();
+    let final_distances = order
+        .iter()
+        .enumerate()
+        .map(|(index, node)| NodeDistance {
+            node: node.clone(),
+            distance: Some(index as u32 + 1),
+        })
+        .collect::<Vec<_>>();
+
+    let metadata = TraceMetadata {
+        algorithm_name: "Topological Sort".to_string(),
+        category: "Graph".to_string(),
+        input_size: input.nodes.len(),
+        event_count: events.len(),
+        result_summary: format!("Ordered {} nodes.", order.len()),
+    };
+
+    Ok(Trace {
+        algorithm: AlgorithmId::TopologicalSort,
+        initial_state: VisualizationState::Graph {
+            nodes: input.nodes.clone(),
+            edges: input.edges.clone(),
+            source: input.source.clone(),
+            target: input.target.clone(),
+            distances: initial_distances,
+            path: Vec::new(),
+        },
+        final_state: VisualizationState::Graph {
+            nodes: input.nodes,
+            edges: input.edges,
+            source: input.source,
+            target: input.target,
+            distances: final_distances,
+            path: order,
+        },
+        events,
+        metadata,
+    })
+}
+
 pub fn trace_kmp(input: SequenceInput) -> Result<Trace, AlgorithmError> {
     validate_sequence(&input)?;
 
@@ -4206,6 +4367,21 @@ fn validate_mst_graph(input: &GraphInput) -> Result<(), AlgorithmError> {
     Ok(())
 }
 
+fn validate_topological_graph(input: &GraphInput) -> Result<(), AlgorithmError> {
+    if input.edges.is_empty() {
+        return Err(AlgorithmError::new(
+            "Topological Sort requires at least one directed edge.",
+        ));
+    }
+    if let Some(edge) = input.edges.iter().find(|edge| !edge.directed) {
+        return Err(AlgorithmError::new(format!(
+            "Topological Sort requires directed edges; edge '{}' is undirected.",
+            edge.id
+        )));
+    }
+    Ok(())
+}
+
 struct UnionFind {
     parent: HashMap<String, String>,
     rank: HashMap<String, usize>,
@@ -4348,6 +4524,60 @@ fn example_graph() -> GraphInput {
     }
 }
 
+fn example_dag() -> GraphInput {
+    GraphInput {
+        nodes: vec![
+            GraphNode {
+                id: "A".to_string(),
+                label: "A".to_string(),
+                x: 0.12,
+                y: 0.5,
+            },
+            GraphNode {
+                id: "B".to_string(),
+                label: "B".to_string(),
+                x: 0.32,
+                y: 0.24,
+            },
+            GraphNode {
+                id: "C".to_string(),
+                label: "C".to_string(),
+                x: 0.32,
+                y: 0.72,
+            },
+            GraphNode {
+                id: "D".to_string(),
+                label: "D".to_string(),
+                x: 0.56,
+                y: 0.32,
+            },
+            GraphNode {
+                id: "E".to_string(),
+                label: "E".to_string(),
+                x: 0.58,
+                y: 0.74,
+            },
+            GraphNode {
+                id: "F".to_string(),
+                label: "F".to_string(),
+                x: 0.86,
+                y: 0.52,
+            },
+        ],
+        edges: vec![
+            directed_edge("AB", "A", "B", 1),
+            directed_edge("AC", "A", "C", 1),
+            directed_edge("BD", "B", "D", 1),
+            directed_edge("CD", "C", "D", 1),
+            directed_edge("CE", "C", "E", 1),
+            directed_edge("DF", "D", "F", 1),
+            directed_edge("EF", "E", "F", 1),
+        ],
+        source: "A".to_string(),
+        target: Some("F".to_string()),
+    }
+}
+
 fn edge(id: &str, from: &str, to: &str, weight: u32) -> GraphEdge {
     GraphEdge {
         id: id.to_string(),
@@ -4355,6 +4585,16 @@ fn edge(id: &str, from: &str, to: &str, weight: u32) -> GraphEdge {
         to: to.to_string(),
         weight,
         directed: false,
+    }
+}
+
+fn directed_edge(id: &str, from: &str, to: &str, weight: u32) -> GraphEdge {
+    GraphEdge {
+        id: id.to_string(),
+        from: from.to_string(),
+        to: to.to_string(),
+        weight,
+        directed: true,
     }
 }
 
@@ -5347,6 +5587,71 @@ mod tests {
     }
 
     #[test]
+    fn topological_sort_trace_orders_dag() {
+        let graph = example_dag();
+        let trace = trace_topological_sort(graph.clone()).expect("trace");
+
+        let order = trace.events.iter().find_map(|event| match event {
+            TraceEvent::GraphPath { nodes, .. } => Some(nodes.clone()),
+            _ => None,
+        });
+        let order = order.expect("topological path event");
+        let positions = order
+            .iter()
+            .enumerate()
+            .map(|(index, node)| (node.as_str(), index))
+            .collect::<HashMap<_, _>>();
+
+        assert_eq!(order.len(), graph.nodes.len());
+        for edge in graph.edges {
+            assert!(positions[edge.from.as_str()] < positions[edge.to.as_str()]);
+        }
+        assert!(
+            trace
+                .events
+                .iter()
+                .any(|event| matches!(event, TraceEvent::GraphVisit { .. }))
+        );
+        assert!(
+            trace
+                .events
+                .iter()
+                .any(|event| matches!(event, TraceEvent::GraphConsiderEdge { .. }))
+        );
+        assert!(
+            trace
+                .events
+                .iter()
+                .any(|event| matches!(event, TraceEvent::GraphRelaxEdge { .. }))
+        );
+        assert!(
+            trace
+                .events
+                .iter()
+                .any(|event| matches!(event, TraceEvent::GraphSettle { .. }))
+        );
+        assert_valid_graph_trace(&trace);
+    }
+
+    #[test]
+    fn topological_sort_rejects_undirected_edges() {
+        let mut graph = example_dag();
+        graph.edges[0].directed = false;
+
+        let error = trace_topological_sort(graph).expect_err("invalid graph");
+        assert!(error.message().contains("directed"));
+    }
+
+    #[test]
+    fn topological_sort_rejects_cycles() {
+        let mut graph = example_dag();
+        graph.edges.push(directed_edge("FB", "F", "B", 1));
+
+        let error = trace_topological_sort(graph).expect_err("invalid graph");
+        assert!(error.message().contains("acyclic"));
+    }
+
+    #[test]
     fn kmp_trace_finds_pattern_matches() {
         let trace = trace_kmp(SequenceInput {
             text: "ababcabcabababd".to_string(),
@@ -5434,6 +5739,7 @@ mod tests {
             AlgorithmId::AStar,
             AlgorithmId::PrimMst,
             AlgorithmId::Kruskal,
+            AlgorithmId::TopologicalSort,
             AlgorithmId::Kmp,
             AlgorithmId::Levenshtein,
         ] {
@@ -5462,7 +5768,8 @@ mod tests {
                 | AlgorithmId::BellmanFord
                 | AlgorithmId::AStar
                 | AlgorithmId::PrimMst
-                | AlgorithmId::Kruskal => assert_valid_graph_trace(&trace),
+                | AlgorithmId::Kruskal
+                | AlgorithmId::TopologicalSort => assert_valid_graph_trace(&trace),
                 AlgorithmId::Kmp | AlgorithmId::Levenshtein => assert_valid_sequence_trace(&trace),
             }
         }
@@ -5627,6 +5934,7 @@ mod tests {
                 | AlgorithmId::AStar
                 | AlgorithmId::PrimMst
                 | AlgorithmId::Kruskal
+                | AlgorithmId::TopologicalSort
         ));
         assert_eq!(trace.metadata.event_count, trace.events.len());
 
