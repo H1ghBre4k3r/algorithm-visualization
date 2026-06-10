@@ -32,6 +32,7 @@ pub enum AlgorithmId {
     Kruskal,
     TopologicalSort,
     Kmp,
+    BoyerMoore,
     Levenshtein,
 }
 
@@ -90,6 +91,7 @@ pub enum AlgorithmOptions {
     Kruskal(KruskalOptions),
     TopologicalSort(TopologicalSortOptions),
     Kmp(KmpOptions),
+    BoyerMoore(BoyerMooreOptions),
     Levenshtein(LevenshteinOptions),
 }
 
@@ -219,6 +221,10 @@ pub struct TopologicalSortOptions {}
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct KmpOptions {}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct BoyerMooreOptions {}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
@@ -521,6 +527,7 @@ pub fn generate_trace(request: AlgorithmRequest) -> Result<Trace, AlgorithmError
         (AlgorithmId::Kruskal, InputData::Graph(input)) => trace_kruskal(input),
         (AlgorithmId::TopologicalSort, InputData::Graph(input)) => trace_topological_sort(input),
         (AlgorithmId::Kmp, InputData::Sequence(input)) => trace_kmp(input),
+        (AlgorithmId::BoyerMoore, InputData::Sequence(input)) => trace_boyer_moore(input),
         (AlgorithmId::Levenshtein, InputData::Sequence(input)) => trace_levenshtein(input),
         (AlgorithmId::Quicksort, _) => Err(AlgorithmError::new(
             "Quicksort requires sort input with a values array.",
@@ -599,6 +606,9 @@ pub fn generate_trace(request: AlgorithmRequest) -> Result<Trace, AlgorithmError
         )),
         (AlgorithmId::Kmp, _) => Err(AlgorithmError::new(
             "Knuth-Morris-Pratt requires sequence input with text and pattern.",
+        )),
+        (AlgorithmId::BoyerMoore, _) => Err(AlgorithmError::new(
+            "Boyer-Moore requires sequence input with text and pattern.",
         )),
         (AlgorithmId::Levenshtein, _) => Err(AlgorithmError::new(
             "Levenshtein Distance requires sequence input with text and pattern.",
@@ -837,6 +847,15 @@ pub fn example_request(algorithm: AlgorithmId) -> AlgorithmRequest {
                 pattern: "ababd".to_string(),
             }),
             options: Some(AlgorithmOptions::Kmp(KmpOptions::default())),
+        },
+        AlgorithmId::BoyerMoore => AlgorithmRequest {
+            algorithm,
+            input_mode: InputMode::Example,
+            input: InputData::Sequence(SequenceInput {
+                text: "here is a simple example".to_string(),
+                pattern: "example".to_string(),
+            }),
+            options: Some(AlgorithmOptions::BoyerMoore(BoyerMooreOptions::default())),
         },
         AlgorithmId::Levenshtein => AlgorithmRequest {
             algorithm,
@@ -4094,6 +4113,139 @@ fn build_lps_trace(pattern: &[char], events: &mut Vec<TraceEvent>) -> Vec<usize>
     lps
 }
 
+pub fn trace_boyer_moore(input: SequenceInput) -> Result<Trace, AlgorithmError> {
+    validate_boyer_moore_sequence(&input)?;
+
+    let text = input.text;
+    let pattern = input.pattern;
+    let text_chars = text.chars().collect::<Vec<_>>();
+    let pattern_chars = pattern.chars().collect::<Vec<_>>();
+    let last_occurrence = build_bad_character_table(&pattern_chars);
+    let mut events = Vec::new();
+    let mut matches = Vec::new();
+    let mut alignment = 0;
+
+    while alignment + pattern_chars.len() <= text_chars.len() {
+        let mut pattern_index = pattern_chars.len();
+        while pattern_index > 0 {
+            pattern_index -= 1;
+            let text_index = alignment + pattern_index;
+            let matched = text_chars[text_index] == pattern_chars[pattern_index];
+            events.push(TraceEvent::SequenceCompare {
+                text_index,
+                pattern_index,
+                matched,
+                message: format!(
+                    "Compare text[{}] '{}' with pattern[{}] '{}' from right to left.",
+                    text_index, text_chars[text_index], pattern_index, pattern_chars[pattern_index]
+                ),
+            });
+
+            if !matched {
+                let shift = bad_character_shift(
+                    text_chars[text_index],
+                    pattern_index,
+                    pattern_chars.len(),
+                    &last_occurrence,
+                );
+                events.push(TraceEvent::SequenceFallback {
+                    from_pattern_index: pattern_index,
+                    to_pattern_index: 0,
+                    message: format!(
+                        "Mismatch on '{}'; shift alignment right by {shift} using the bad-character rule.",
+                        text_chars[text_index]
+                    ),
+                });
+                alignment += shift;
+                break;
+            }
+        }
+
+        if pattern_index == 0 && text_chars[alignment] == pattern_chars[0] {
+            let start_index = alignment;
+            let end_index = alignment + pattern_chars.len() - 1;
+            matches.push(start_index);
+            events.push(TraceEvent::SequenceMatch {
+                start_index,
+                end_index,
+                message: format!("Pattern found at text index {start_index}."),
+            });
+            let shift = full_match_shift(&pattern_chars, &last_occurrence);
+            events.push(TraceEvent::SequenceFallback {
+                from_pattern_index: pattern_chars.len(),
+                to_pattern_index: 0,
+                message: format!("Shift alignment right by {shift} after the match."),
+            });
+            alignment += shift;
+        }
+    }
+
+    let metadata = TraceMetadata {
+        algorithm_name: "Boyer-Moore".to_string(),
+        category: "Sequence".to_string(),
+        input_size: text_chars.len(),
+        event_count: events.len(),
+        result_summary: if matches.is_empty() {
+            "No pattern matches found.".to_string()
+        } else {
+            format!("Found {} pattern match(es).", matches.len())
+        },
+    };
+
+    Ok(Trace {
+        algorithm: AlgorithmId::BoyerMoore,
+        initial_state: VisualizationState::Sequence {
+            text: text.clone(),
+            pattern: pattern.clone(),
+            lps: Vec::new(),
+            matches: Vec::new(),
+            matrix: Vec::new(),
+        },
+        final_state: VisualizationState::Sequence {
+            text,
+            pattern,
+            lps: Vec::new(),
+            matches,
+            matrix: Vec::new(),
+        },
+        events,
+        metadata,
+    })
+}
+
+fn build_bad_character_table(pattern: &[char]) -> HashMap<char, usize> {
+    pattern
+        .iter()
+        .enumerate()
+        .map(|(index, character)| (*character, index))
+        .collect::<HashMap<_, _>>()
+}
+
+fn bad_character_shift(
+    mismatched: char,
+    pattern_index: usize,
+    pattern_len: usize,
+    last_occurrence: &HashMap<char, usize>,
+) -> usize {
+    match last_occurrence.get(&mismatched).copied() {
+        Some(last_index) if last_index < pattern_index => pattern_index - last_index,
+        Some(_) => 1,
+        None => (pattern_index + 1).min(pattern_len).max(1),
+    }
+}
+
+fn full_match_shift(pattern: &[char], last_occurrence: &HashMap<char, usize>) -> usize {
+    if pattern.len() <= 1 {
+        return 1;
+    }
+
+    let last_char = pattern[pattern.len() - 1];
+    match last_occurrence.get(&last_char).copied() {
+        Some(index) if index < pattern.len() - 1 => pattern.len() - 1 - index,
+        _ => 1,
+    }
+}
+
 fn validate_sequence(input: &SequenceInput) -> Result<(), AlgorithmError> {
     if input.text.is_empty() {
         return Err(AlgorithmError::new("KMP text cannot be empty."));
@@ -4114,6 +4266,32 @@ fn validate_sequence(input: &SequenceInput) -> Result<(), AlgorithmError> {
     if input.pattern.chars().count() > 48 {
         return Err(AlgorithmError::new(
             "KMP pattern is capped at 48 characters for interactive playback.",
+        ));
+    }
+
+    Ok(())
+}
+
+fn validate_boyer_moore_sequence(input: &SequenceInput) -> Result<(), AlgorithmError> {
+    if input.text.is_empty() {
+        return Err(AlgorithmError::new("Boyer-Moore text cannot be empty."));
+    }
+    if input.pattern.is_empty() {
+        return Err(AlgorithmError::new("Boyer-Moore pattern cannot be empty."));
+    }
+    if input.pattern.chars().count() > input.text.chars().count() {
+        return Err(AlgorithmError::new(
+            "Boyer-Moore pattern cannot be longer than the text.",
+        ));
+    }
+    if input.text.chars().count() > 160 {
+        return Err(AlgorithmError::new(
+            "Boyer-Moore text is capped at 160 characters for interactive playback.",
+        ));
+    }
+    if input.pattern.chars().count() > 48 {
+        return Err(AlgorithmError::new(
+            "Boyer-Moore pattern is capped at 48 characters for interactive playback.",
         ));
     }
 
@@ -5684,6 +5862,50 @@ mod tests {
     }
 
     #[test]
+    fn boyer_moore_trace_finds_pattern_matches() {
+        let trace = trace_boyer_moore(SequenceInput {
+            text: "here is a simple example".to_string(),
+            pattern: "example".to_string(),
+        })
+        .expect("trace");
+
+        assert_eq!(
+            trace.final_state,
+            VisualizationState::Sequence {
+                text: "here is a simple example".to_string(),
+                pattern: "example".to_string(),
+                lps: Vec::new(),
+                matches: vec![17],
+                matrix: Vec::new(),
+            }
+        );
+        assert!(
+            trace
+                .events
+                .iter()
+                .any(|event| matches!(event, TraceEvent::SequenceCompare { matched: false, .. }))
+        );
+        assert!(
+            trace
+                .events
+                .iter()
+                .any(|event| matches!(event, TraceEvent::SequenceFallback { .. }))
+        );
+        assert_valid_sequence_trace(&trace);
+    }
+
+    #[test]
+    fn boyer_moore_rejects_pattern_longer_than_text() {
+        let error = trace_boyer_moore(SequenceInput {
+            text: "abc".to_string(),
+            pattern: "abcd".to_string(),
+        })
+        .expect_err("invalid sequence input");
+
+        assert!(error.message().contains("longer"));
+    }
+
+    #[test]
     fn levenshtein_trace_computes_edit_distance() {
         let trace = trace_levenshtein(SequenceInput {
             text: "kitten".to_string(),
@@ -5741,6 +5963,7 @@ mod tests {
             AlgorithmId::Kruskal,
             AlgorithmId::TopologicalSort,
             AlgorithmId::Kmp,
+            AlgorithmId::BoyerMoore,
             AlgorithmId::Levenshtein,
         ] {
             let trace = generate_trace(example_request(algorithm)).expect("trace");
@@ -5770,7 +5993,9 @@ mod tests {
                 | AlgorithmId::PrimMst
                 | AlgorithmId::Kruskal
                 | AlgorithmId::TopologicalSort => assert_valid_graph_trace(&trace),
-                AlgorithmId::Kmp | AlgorithmId::Levenshtein => assert_valid_sequence_trace(&trace),
+                AlgorithmId::Kmp | AlgorithmId::BoyerMoore | AlgorithmId::Levenshtein => {
+                    assert_valid_sequence_trace(&trace)
+                }
             }
         }
     }
@@ -6005,7 +6230,7 @@ mod tests {
         };
         assert!(matches!(
             trace.algorithm,
-            AlgorithmId::Kmp | AlgorithmId::Levenshtein
+            AlgorithmId::Kmp | AlgorithmId::BoyerMoore | AlgorithmId::Levenshtein
         ));
         assert_eq!(trace.metadata.event_count, trace.events.len());
 
@@ -6087,8 +6312,12 @@ mod tests {
         else {
             panic!("sequence trace must finish with a sequence state");
         };
-        if trace.algorithm == AlgorithmId::Kmp {
-            assert_eq!(lps.len(), pattern_len);
+        if matches!(trace.algorithm, AlgorithmId::Kmp | AlgorithmId::BoyerMoore) {
+            if trace.algorithm == AlgorithmId::Kmp {
+                assert_eq!(lps.len(), pattern_len);
+            } else {
+                assert!(lps.is_empty());
+            }
             for start_index in matches {
                 let candidate = text
                     .chars()
@@ -6097,6 +6326,7 @@ mod tests {
                     .collect::<String>();
                 assert_eq!(candidate, *pattern);
             }
+            assert!(matrix.is_empty());
         } else {
             assert_eq!(matrix.len(), text_len + 1);
             assert!(matrix.iter().all(|row| row.len() == pattern_len + 1));

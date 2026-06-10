@@ -25,9 +25,9 @@ export type AvailableAlgorithmId =
   | "kruskal"
   | "topologicalSort"
   | "kmp"
+  | "boyerMoore"
   | "levenshtein";
 export type PlannedAlgorithmId =
-  | "boyerMoore"
   | "prefixTrie"
   | "handshake"
   | "timeSync"
@@ -74,6 +74,7 @@ export type AlgorithmOptions =
   | { type: "kruskal"; value: KruskalOptions }
   | { type: "topologicalSort"; value: TopologicalSortOptions }
   | { type: "kmp"; value: KmpOptions }
+  | { type: "boyerMoore"; value: BoyerMooreOptions }
   | { type: "levenshtein"; value: LevenshteinOptions };
 
 export interface QuicksortOptions {
@@ -117,6 +118,7 @@ export type PrimMstOptions = Record<string, never>;
 export type KruskalOptions = Record<string, never>;
 export type TopologicalSortOptions = Record<string, never>;
 export type KmpOptions = Record<string, never>;
+export type BoyerMooreOptions = Record<string, never>;
 export type LevenshteinOptions = Record<string, never>;
 
 export interface SortInput {

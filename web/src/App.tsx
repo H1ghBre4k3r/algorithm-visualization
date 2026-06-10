@@ -77,6 +77,7 @@ export default function App() {
     kruskal: customTemplate("kruskal"),
     topologicalSort: customTemplate("topologicalSort"),
     kmp: customTemplate("kmp"),
+    boyerMoore: customTemplate("boyerMoore"),
     levenshtein: customTemplate("levenshtein"),
   });
   const [trace, setTrace] = useState<Trace | null>(null);
@@ -159,7 +160,7 @@ export default function App() {
   function refreshRandomInput() {
     if (isSortAlgorithm(algorithm)) {
       setRandomSort(randomSortInput(sortSize));
-    } else if (algorithm === "kmp") {
+    } else if (algorithm === "kmp" || algorithm === "boyerMoore") {
       setRandomSequence(randomSequenceInput(sequenceSize));
     } else if (algorithm === "levenshtein") {
       setRandomEditDistance(randomEditDistanceInput(editSize));
@@ -310,7 +311,7 @@ export default function App() {
                   }}
                 />
               )}
-              {algorithm === "kmp" && (
+              {(algorithm === "kmp" || algorithm === "boyerMoore") && (
                 <RangeControl
                   label="Length"
                   min={12}
@@ -454,7 +455,7 @@ function buildRequest(
       options: optionsForAlgorithm(algorithm),
     };
   }
-  if (algorithm === "kmp") {
+  if (algorithm === "kmp" || algorithm === "boyerMoore") {
     return {
       algorithm,
       inputMode,
@@ -549,6 +550,9 @@ function optionsForAlgorithm(algorithm: AvailableAlgorithmId): AlgorithmRequest[
   if (algorithm === "kmp") {
     return { type: "kmp", value: {} };
   }
+  if (algorithm === "boyerMoore") {
+    return { type: "boyerMoore", value: {} };
+  }
   if (algorithm === "levenshtein") {
     return { type: "levenshtein", value: {} };
   }
@@ -578,7 +582,7 @@ function optionsForAlgorithm(algorithm: AvailableAlgorithmId): AlgorithmRequest[
 
 function randomControlLabel(algorithm: AvailableAlgorithmId) {
   if (isSortAlgorithm(algorithm)) return "Values";
-  if (algorithm === "kmp" || algorithm === "levenshtein") return "Text";
+  if (algorithm === "kmp" || algorithm === "boyerMoore" || algorithm === "levenshtein") return "Text";
   return "Nodes";
 }
 

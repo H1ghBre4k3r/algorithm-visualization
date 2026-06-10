@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  parseBoyerMooreInput,
   parseCustomInput,
   parseEditDistanceInput,
   parseGraphInput,
@@ -204,6 +205,26 @@ describe("parseKmpInput", () => {
 
   it("rejects patterns longer than the text", () => {
     expect(() => parseKmpInput('{"text":"abc","pattern":"abcd"}')).toThrow("longer");
+  });
+});
+
+describe("parseBoyerMooreInput", () => {
+  it("accepts Boyer-Moore text and pattern", () => {
+    expect(parseBoyerMooreInput('{"text":"here is a simple example","pattern":"example"}')).toEqual({
+      text: "here is a simple example",
+      pattern: "example",
+    });
+  });
+
+  it("routes Boyer-Moore custom input through the sequence parser", () => {
+    expect(parseCustomInput("boyerMoore", '{"text":"bananas","pattern":"ana"}')).toEqual({
+      type: "sequence",
+      value: { text: "bananas", pattern: "ana" },
+    });
+  });
+
+  it("rejects Boyer-Moore patterns longer than the text", () => {
+    expect(() => parseBoyerMooreInput('{"text":"abc","pattern":"abcd"}')).toThrow("Boyer-Moore");
   });
 });
 

@@ -74,7 +74,7 @@ export function drawTrace(canvas: HTMLCanvasElement, trace: Trace, step: number)
     drawGraphTrace(context, width, height, trace, step);
   }
 
-  if (trace.algorithm === "kmp" && trace.initialState.type === "sequence") {
+  if ((trace.algorithm === "kmp" || trace.algorithm === "boyerMoore") && trace.initialState.type === "sequence") {
     drawSequenceTrace(context, width, height, trace, step);
   }
 

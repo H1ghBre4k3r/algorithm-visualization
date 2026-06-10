@@ -64,6 +64,11 @@ export const exampleSequenceInput: SequenceInput = {
   pattern: "ababd",
 };
 
+export const exampleBoyerMooreInput: SequenceInput = {
+  text: "here is a simple example",
+  pattern: "example",
+};
+
 export const exampleEditDistanceInput: SequenceInput = {
   text: "kitten",
   pattern: "sitting",
@@ -148,6 +153,15 @@ export function exampleRequest(algorithm: AvailableAlgorithmId): AlgorithmReques
     };
   }
 
+  if (algorithm === "boyerMoore") {
+    return {
+      algorithm,
+      inputMode: "example",
+      input: { type: "sequence", value: structuredClone(exampleBoyerMooreInput) },
+      options: { type: "boyerMoore", value: {} },
+    };
+  }
+
   if (algorithm === "levenshtein") {
     return {
       algorithm,
@@ -229,6 +243,8 @@ export function customTemplate(algorithm: AvailableAlgorithmId): string {
         : exampleSortInput
       : algorithm === "kmp"
         ? exampleSequenceInput
+        : algorithm === "boyerMoore"
+          ? exampleBoyerMooreInput
         : algorithm === "levenshtein"
           ? exampleEditDistanceInput
           : algorithm === "topologicalSort"

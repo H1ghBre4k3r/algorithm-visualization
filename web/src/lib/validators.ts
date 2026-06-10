@@ -44,6 +44,9 @@ export function parseCustomInput(algorithm: AvailableAlgorithmId, raw: string): 
   if (algorithm === "kmp") {
     return { type: "sequence", value: parseKmpInput(raw) };
   }
+  if (algorithm === "boyerMoore") {
+    return { type: "sequence", value: parseBoyerMooreInput(raw) };
+  }
   if (algorithm === "levenshtein") {
     return { type: "sequence", value: parseEditDistanceInput(raw) };
   }
@@ -137,20 +140,28 @@ export function parseGraphInput(raw: string): GraphInput {
 }
 
 export function parseKmpInput(raw: string): SequenceInput {
+  return parsePatternSearchInput(raw, "KMP");
+}
+
+export function parseBoyerMooreInput(raw: string): SequenceInput {
+  return parsePatternSearchInput(raw, "Boyer-Moore");
+}
+
+function parsePatternSearchInput(raw: string, label: string): SequenceInput {
   const parsed = readRecord(parseJson(raw));
-  const text = readString(parsed.text, "KMP text");
-  const pattern = readString(parsed.pattern, "KMP pattern");
+  const text = readString(parsed.text, `${label} text`);
+  const pattern = readString(parsed.pattern, `${label} pattern`);
   const textLength = Array.from(text).length;
   const patternLength = Array.from(pattern).length;
 
   if (patternLength > textLength) {
-    throw new InputValidationError("KMP pattern cannot be longer than the text.");
+    throw new InputValidationError(`${label} pattern cannot be longer than the text.`);
   }
   if (textLength > 160) {
-    throw new InputValidationError("KMP text supports up to 160 characters.");
+    throw new InputValidationError(`${label} text supports up to 160 characters.`);
   }
   if (patternLength > 48) {
-    throw new InputValidationError("KMP pattern supports up to 48 characters.");
+    throw new InputValidationError(`${label} pattern supports up to 48 characters.`);
   }
 
   return { text, pattern };

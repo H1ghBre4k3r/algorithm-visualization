@@ -236,7 +236,7 @@ export const algorithms: AlgorithmCatalogItem[] = [
     id: "boyerMoore",
     label: "Boyer-Moore",
     category: "sequence",
-    status: "planned",
+    status: "available",
     summary: "Use mismatch heuristics to skip ahead during pattern search.",
   },
   {

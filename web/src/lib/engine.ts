@@ -11,7 +11,11 @@ let wasmModulePromise: Promise<WasmModule | null> | null = null;
 export async function generateTrace(request: AlgorithmRequest): Promise<Trace> {
   const wasmModule = await loadWasmModule();
   if (wasmModule) {
-    return wasmModule.generate_trace_from_request(request);
+    try {
+      return wasmModule.generate_trace_from_request(request);
+    } catch (error) {
+      console.warn("WASM trace generation failed; using TypeScript fallback.", error);
+    }
   }
 
   return generateTraceFallback(request);

@@ -41,6 +41,7 @@ pub fn example_request_for(algorithm: &str) -> Result<JsValue, JsValue> {
         "kruskal" => AlgorithmId::Kruskal,
         "topologicalSort" => AlgorithmId::TopologicalSort,
         "kmp" => AlgorithmId::Kmp,
+        "boyerMoore" => AlgorithmId::BoyerMoore,
         "levenshtein" => AlgorithmId::Levenshtein,
         other => {
             return Err(JsValue::from_str(&format!(

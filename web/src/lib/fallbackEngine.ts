@@ -119,6 +119,10 @@ export function generateTraceFallback(request: AlgorithmRequest): Trace {
     return traceKmp(request.input.value);
   }
 
+  if (request.algorithm === "boyerMoore" && request.input.type === "sequence") {
+    return traceBoyerMoore(request.input.value);
+  }
+
   if (request.algorithm === "levenshtein" && request.input.type === "sequence") {
     return traceLevenshtein(request.input.value);
   }
@@ -2998,6 +3002,94 @@ function traceKmp(input: SequenceInput): Trace {
   };
 }
 
+function traceBoyerMoore(input: SequenceInput): Trace {
+  validateBoyerMooreSequence(input);
+
+  const text = Array.from(input.text);
+  const pattern = Array.from(input.pattern);
+  const lastOccurrence = buildBadCharacterTable(pattern);
+  const events: TraceEvent[] = [];
+  const matches: number[] = [];
+  let alignment = 0;
+
+  while (alignment + pattern.length <= text.length) {
+    let patternIndex = pattern.length;
+    while (patternIndex > 0) {
+      patternIndex -= 1;
+      const textIndex = alignment + patternIndex;
+      const matched = text[textIndex] === pattern[patternIndex];
+      events.push({
+        type: "sequenceCompare",
+        textIndex,
+        patternIndex,
+        matched,
+        message: `Compare text[${textIndex}] '${text[textIndex]}' with pattern[${patternIndex}] '${pattern[patternIndex]}' from right to left.`,
+      });
+
+      if (!matched) {
+        const shift = badCharacterShift(text[textIndex], patternIndex, pattern.length, lastOccurrence);
+        events.push({
+          type: "sequenceFallback",
+          fromPatternIndex: patternIndex,
+          toPatternIndex: 0,
+          message: `Mismatch on '${text[textIndex]}'; shift alignment right by ${shift} using the bad-character rule.`,
+        });
+        alignment += shift;
+        break;
+      }
+    }
+
+    if (patternIndex === 0 && text[alignment] === pattern[0]) {
+      const startIndex = alignment;
+      const endIndex = alignment + pattern.length - 1;
+      matches.push(startIndex);
+      events.push({
+        type: "sequenceMatch",
+        startIndex,
+        endIndex,
+        message: `Pattern found at text index ${startIndex}.`,
+      });
+      const shift = fullMatchShift(pattern, lastOccurrence);
+      events.push({
+        type: "sequenceFallback",
+        fromPatternIndex: pattern.length,
+        toPatternIndex: 0,
+        message: `Shift alignment right by ${shift} after the match.`,
+      });
+      alignment += shift;
+    }
+  }
+
+  return {
+    algorithm: "boyerMoore",
+    initialState: {
+      type: "sequence",
+      text: input.text,
+      pattern: input.pattern,
+      lps: [],
+      matches: [],
+      matrix: [],
+    },
+    finalState: {
+      type: "sequence",
+      text: input.text,
+      pattern: input.pattern,
+      lps: [],
+      matches,
+      matrix: [],
+    },
+    events,
+    metadata: {
+      algorithmName: "Boyer-Moore",
+      category: "Sequence",
+      inputSize: text.length,
+      eventCount: events.length,
+      resultSummary:
+        matches.length === 0 ? "No pattern matches found." : `Found ${matches.length} pattern match(es).`,
+    },
+  };
+}
+
 function traceLevenshtein(input: SequenceInput): Trace {
   validateEditDistance(input);
 
@@ -3129,6 +3221,38 @@ function buildLpsTrace(pattern: string[], events: TraceEvent[]) {
   }
 
   return lps;
+}
+
+function buildBadCharacterTable(pattern: string[]) {
+  const table = new Map<string, number>();
+  for (const [index, character] of pattern.entries()) {
+    table.set(character, index);
+  }
+  return table;
+}
+
+function badCharacterShift(
+  mismatched: string,
+  patternIndex: number,
+  patternLength: number,
+  lastOccurrence: Map<string, number>,
+) {
+  const lastIndex = lastOccurrence.get(mismatched);
+  if (lastIndex === undefined) {
+    return Math.max(1, Math.min(patternIndex + 1, patternLength));
+  }
+  if (lastIndex < patternIndex) {
+    return patternIndex - lastIndex;
+  }
+  return 1;
+}
+
+function fullMatchShift(pattern: string[], lastOccurrence: Map<string, number>) {
+  if (pattern.length <= 1) {
+    return 1;
+  }
+  const lastIndex = lastOccurrence.get(pattern[pattern.length - 1]);
+  return lastIndex !== undefined && lastIndex < pattern.length - 1 ? pattern.length - 1 - lastIndex : 1;
 }
 
 interface AdjacentEdge {
@@ -3363,6 +3487,27 @@ function validateSequence(input: SequenceInput) {
   }
   if (patternLength > 48) {
     throw new Error("KMP pattern is capped at 48 characters for interactive playback.");
+  }
+}
+
+function validateBoyerMooreSequence(input: SequenceInput) {
+  const textLength = Array.from(input.text).length;
+  const patternLength = Array.from(input.pattern).length;
+
+  if (textLength === 0) {
+    throw new Error("Boyer-Moore text cannot be empty.");
+  }
+  if (patternLength === 0) {
+    throw new Error("Boyer-Moore pattern cannot be empty.");
+  }
+  if (patternLength > textLength) {
+    throw new Error("Boyer-Moore pattern cannot be longer than the text.");
+  }
+  if (textLength > 160) {
+    throw new Error("Boyer-Moore text is capped at 160 characters for interactive playback.");
+  }
+  if (patternLength > 48) {
+    throw new Error("Boyer-Moore pattern is capped at 48 characters for interactive playback.");
   }
 }
 

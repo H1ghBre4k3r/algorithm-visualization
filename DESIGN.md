@@ -63,6 +63,7 @@ Reference: https://impeccable.style
 - Sequence:
   - Active comparison: amber.
   - Mismatch/fallback: red.
+  - Boyer-Moore skip: red mismatch link with shift messaging.
   - Prefix table focus: violet.
   - Dynamic-programming active cell: blue.
   - Edit operation costs: amber/red/violet for insertion, deletion, and substitution.
