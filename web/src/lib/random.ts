@@ -1,4 +1,4 @@
-import type { GraphInput, SequenceInput, SortInput } from "../types";
+import type { DistributedInput, GraphInput, SequenceInput, SortInput } from "../types";
 
 export function randomSortInput(size: number): SortInput {
   return {
@@ -162,5 +162,20 @@ export function randomTrieInput(size: number): SequenceInput {
     text: "",
     pattern: "",
     words,
+  };
+}
+
+export function randomDistributedInput(size: number): DistributedInput {
+  const peerCount = Math.max(2, Math.min(8, size));
+  const peers = Array.from({ length: peerCount }, (_, index) => ({
+    id: `p${index + 1}`,
+    label: index === 0 ? "Client" : index === 1 ? "Server" : `Peer ${index + 1}`,
+  }));
+
+  return {
+    peers,
+    initiator: peers[0].id,
+    responder: peers[1].id,
+    latencyMs: 80 + Math.floor(Math.random() * 160),
   };
 }

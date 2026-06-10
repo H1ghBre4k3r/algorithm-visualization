@@ -35,6 +35,7 @@ pub enum AlgorithmId {
     BoyerMoore,
     Levenshtein,
     PrefixTrie,
+    Handshake,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -61,6 +62,7 @@ pub enum InputData {
     Sort(SortInput),
     Graph(GraphInput),
     Sequence(SequenceInput),
+    Distributed(DistributedInput),
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -95,6 +97,7 @@ pub enum AlgorithmOptions {
     BoyerMoore(BoyerMooreOptions),
     Levenshtein(LevenshteinOptions),
     PrefixTrie(PrefixTrieOptions),
+    Handshake(HandshakeOptions),
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -236,6 +239,10 @@ pub struct LevenshteinOptions {}
 #[serde(rename_all = "camelCase")]
 pub struct PrefixTrieOptions {}
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct HandshakeOptions {}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SortInput {
@@ -289,6 +296,41 @@ pub struct SequenceInput {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct DistributedInput {
+    pub peers: Vec<DistributedPeer>,
+    pub initiator: String,
+    pub responder: String,
+    #[serde(default)]
+    pub latency_ms: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DistributedPeer {
+    pub id: String,
+    pub label: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DistributedPeerState {
+    pub peer: String,
+    pub state: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DistributedMessage {
+    pub id: String,
+    pub from: String,
+    pub to: String,
+    pub label: String,
+    pub sent_at: u32,
+    pub deliver_at: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Trace {
     pub algorithm: AlgorithmId,
     pub initial_state: VisualizationState,
@@ -317,6 +359,11 @@ pub enum VisualizationState {
         lps: Vec<usize>,
         matches: Vec<usize>,
         matrix: Vec<Vec<Option<usize>>>,
+    },
+    Distributed {
+        peers: Vec<DistributedPeer>,
+        states: Vec<DistributedPeerState>,
+        messages: Vec<DistributedMessage>,
     },
 }
 
@@ -458,6 +505,31 @@ pub enum TraceEvent {
         matrix: Vec<Vec<Option<usize>>>,
         message: String,
     },
+    DistributedState {
+        peer: String,
+        state: String,
+        message: String,
+    },
+    DistributedSend {
+        #[serde(rename = "messageId")]
+        message_id: String,
+        from: String,
+        to: String,
+        label: String,
+        #[serde(rename = "sentAt")]
+        sent_at: u32,
+        #[serde(rename = "deliverAt")]
+        deliver_at: u32,
+        message: String,
+    },
+    DistributedDeliver {
+        #[serde(rename = "messageId")]
+        message_id: String,
+        from: String,
+        to: String,
+        label: String,
+        message: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -542,6 +614,7 @@ pub fn generate_trace(request: AlgorithmRequest) -> Result<Trace, AlgorithmError
         (AlgorithmId::BoyerMoore, InputData::Sequence(input)) => trace_boyer_moore(input),
         (AlgorithmId::Levenshtein, InputData::Sequence(input)) => trace_levenshtein(input),
         (AlgorithmId::PrefixTrie, InputData::Sequence(input)) => trace_prefix_trie(input),
+        (AlgorithmId::Handshake, InputData::Distributed(input)) => trace_handshake(input),
         (AlgorithmId::Quicksort, _) => Err(AlgorithmError::new(
             "Quicksort requires sort input with a values array.",
         )),
@@ -628,6 +701,9 @@ pub fn generate_trace(request: AlgorithmRequest) -> Result<Trace, AlgorithmError
         )),
         (AlgorithmId::PrefixTrie, _) => Err(AlgorithmError::new(
             "Prefix Tree requires sequence input with a words array.",
+        )),
+        (AlgorithmId::Handshake, _) => Err(AlgorithmError::new(
+            "Handshake Protocol requires distributed input with peers, initiator, and responder.",
         )),
     }
 }
@@ -901,6 +977,30 @@ pub fn example_request(algorithm: AlgorithmId) -> AlgorithmRequest {
                 ],
             }),
             options: Some(AlgorithmOptions::PrefixTrie(PrefixTrieOptions::default())),
+        },
+        AlgorithmId::Handshake => AlgorithmRequest {
+            algorithm,
+            input_mode: InputMode::Example,
+            input: InputData::Distributed(DistributedInput {
+                peers: vec![
+                    DistributedPeer {
+                        id: "client".to_string(),
+                        label: "Client".to_string(),
+                    },
+                    DistributedPeer {
+                        id: "server".to_string(),
+                        label: "Server".to_string(),
+                    },
+                    DistributedPeer {
+                        id: "observer".to_string(),
+                        label: "Observer".to_string(),
+                    },
+                ],
+                initiator: "client".to_string(),
+                responder: "server".to_string(),
+                latency_ms: 120,
+            }),
+            options: Some(AlgorithmOptions::Handshake(HandshakeOptions::default())),
         },
     }
 }
@@ -4551,6 +4651,234 @@ fn validate_prefix_trie_sequence(input: &SequenceInput) -> Result<(), AlgorithmE
     Ok(())
 }
 
+pub fn trace_handshake(input: DistributedInput) -> Result<Trace, AlgorithmError> {
+    validate_distributed_input(&input)?;
+
+    let latency = input.latency_ms.max(40);
+    let mut events = Vec::new();
+    let mut messages = Vec::new();
+    let mut states = input
+        .peers
+        .iter()
+        .map(|peer| DistributedPeerState {
+            peer: peer.id.clone(),
+            state: "idle".to_string(),
+        })
+        .collect::<Vec<_>>();
+
+    push_distributed_state(
+        &mut events,
+        &mut states,
+        &input.initiator,
+        "syn-sent",
+        "Initiator opens the handshake and prepares a SYN.",
+    );
+    push_distributed_message(
+        &mut events,
+        &mut messages,
+        DistributedMessage {
+            id: "syn".to_string(),
+            from: input.initiator.clone(),
+            to: input.responder.clone(),
+            label: "SYN".to_string(),
+            sent_at: 0,
+            deliver_at: latency,
+        },
+        "Send SYN from initiator to responder.",
+    );
+    events.push(TraceEvent::DistributedDeliver {
+        message_id: "syn".to_string(),
+        from: input.initiator.clone(),
+        to: input.responder.clone(),
+        label: "SYN".to_string(),
+        message: "Responder receives SYN and allocates connection state.".to_string(),
+    });
+    push_distributed_state(
+        &mut events,
+        &mut states,
+        &input.responder,
+        "syn-received",
+        "Responder records the half-open connection.",
+    );
+
+    push_distributed_message(
+        &mut events,
+        &mut messages,
+        DistributedMessage {
+            id: "synAck".to_string(),
+            from: input.responder.clone(),
+            to: input.initiator.clone(),
+            label: "SYN-ACK".to_string(),
+            sent_at: latency,
+            deliver_at: latency * 2,
+        },
+        "Responder replies with SYN-ACK.",
+    );
+    events.push(TraceEvent::DistributedDeliver {
+        message_id: "synAck".to_string(),
+        from: input.responder.clone(),
+        to: input.initiator.clone(),
+        label: "SYN-ACK".to_string(),
+        message: "Initiator receives SYN-ACK and confirms the responder is ready.".to_string(),
+    });
+    push_distributed_state(
+        &mut events,
+        &mut states,
+        &input.initiator,
+        "established",
+        "Initiator marks the session established.",
+    );
+
+    push_distributed_message(
+        &mut events,
+        &mut messages,
+        DistributedMessage {
+            id: "ack".to_string(),
+            from: input.initiator.clone(),
+            to: input.responder.clone(),
+            label: "ACK".to_string(),
+            sent_at: latency * 2,
+            deliver_at: latency * 3,
+        },
+        "Initiator sends the final ACK.",
+    );
+    events.push(TraceEvent::DistributedDeliver {
+        message_id: "ack".to_string(),
+        from: input.initiator.clone(),
+        to: input.responder.clone(),
+        label: "ACK".to_string(),
+        message: "Responder receives ACK and completes the handshake.".to_string(),
+    });
+    push_distributed_state(
+        &mut events,
+        &mut states,
+        &input.responder,
+        "established",
+        "Responder marks the session established.",
+    );
+
+    let initial_states = input
+        .peers
+        .iter()
+        .map(|peer| DistributedPeerState {
+            peer: peer.id.clone(),
+            state: "idle".to_string(),
+        })
+        .collect::<Vec<_>>();
+    let metadata = TraceMetadata {
+        algorithm_name: "Handshake Protocol".to_string(),
+        category: "Distributed".to_string(),
+        input_size: input.peers.len(),
+        event_count: events.len(),
+        result_summary: format!(
+            "{} and {} established a session in three messages.",
+            input.initiator, input.responder
+        ),
+    };
+
+    Ok(Trace {
+        algorithm: AlgorithmId::Handshake,
+        initial_state: VisualizationState::Distributed {
+            peers: input.peers.clone(),
+            states: initial_states,
+            messages: Vec::new(),
+        },
+        final_state: VisualizationState::Distributed {
+            peers: input.peers,
+            states,
+            messages,
+        },
+        events,
+        metadata,
+    })
+}
+
+fn push_distributed_state(
+    events: &mut Vec<TraceEvent>,
+    states: &mut [DistributedPeerState],
+    peer: &str,
+    state: &str,
+    message: &str,
+) {
+    if let Some(item) = states.iter_mut().find(|item| item.peer == peer) {
+        item.state = state.to_string();
+    }
+    events.push(TraceEvent::DistributedState {
+        peer: peer.to_string(),
+        state: state.to_string(),
+        message: message.to_string(),
+    });
+}
+
+fn push_distributed_message(
+    events: &mut Vec<TraceEvent>,
+    messages: &mut Vec<DistributedMessage>,
+    distributed_message: DistributedMessage,
+    message: &str,
+) {
+    events.push(TraceEvent::DistributedSend {
+        message_id: distributed_message.id.clone(),
+        from: distributed_message.from.clone(),
+        to: distributed_message.to.clone(),
+        label: distributed_message.label.clone(),
+        sent_at: distributed_message.sent_at,
+        deliver_at: distributed_message.deliver_at,
+        message: message.to_string(),
+    });
+    messages.push(distributed_message);
+}
+
+fn validate_distributed_input(input: &DistributedInput) -> Result<(), AlgorithmError> {
+    if input.peers.len() < 2 {
+        return Err(AlgorithmError::new(
+            "Handshake Protocol needs at least two peers.",
+        ));
+    }
+    if input.peers.len() > 8 {
+        return Err(AlgorithmError::new(
+            "Handshake Protocol supports up to 8 peers for interactive playback.",
+        ));
+    }
+
+    let mut peer_ids = HashSet::new();
+    for peer in &input.peers {
+        if peer.id.trim().is_empty() {
+            return Err(AlgorithmError::new("Peer ids cannot be empty."));
+        }
+        if peer.label.trim().is_empty() {
+            return Err(AlgorithmError::new(format!(
+                "Peer '{}' needs a non-empty label.",
+                peer.id
+            )));
+        }
+        if !peer_ids.insert(peer.id.as_str()) {
+            return Err(AlgorithmError::new(format!(
+                "Duplicate peer id '{}'.",
+                peer.id
+            )));
+        }
+    }
+    if !peer_ids.contains(input.initiator.as_str()) {
+        return Err(AlgorithmError::new(format!(
+            "Initiator peer '{}' does not exist.",
+            input.initiator
+        )));
+    }
+    if !peer_ids.contains(input.responder.as_str()) {
+        return Err(AlgorithmError::new(format!(
+            "Responder peer '{}' does not exist.",
+            input.responder
+        )));
+    }
+    if input.initiator == input.responder {
+        return Err(AlgorithmError::new(
+            "Initiator and responder must be different peers.",
+        ));
+    }
+
+    Ok(())
+}
+
 pub fn trace_levenshtein(input: SequenceInput) -> Result<Trace, AlgorithmError> {
     validate_edit_distance_sequence(&input)?;
 
@@ -6254,6 +6582,71 @@ mod tests {
     }
 
     #[test]
+    fn handshake_trace_establishes_session() {
+        let trace = trace_handshake(DistributedInput {
+            peers: vec![
+                DistributedPeer {
+                    id: "a".to_string(),
+                    label: "A".to_string(),
+                },
+                DistributedPeer {
+                    id: "b".to_string(),
+                    label: "B".to_string(),
+                },
+            ],
+            initiator: "a".to_string(),
+            responder: "b".to_string(),
+            latency_ms: 80,
+        })
+        .expect("trace");
+
+        let VisualizationState::Distributed {
+            states, messages, ..
+        } = &trace.final_state
+        else {
+            panic!("handshake must finish with distributed state");
+        };
+        assert_eq!(messages.len(), 3);
+        assert!(messages.iter().any(|message| message.label == "SYN"));
+        assert!(messages.iter().any(|message| message.label == "SYN-ACK"));
+        assert!(messages.iter().any(|message| message.label == "ACK"));
+        assert!(
+            states
+                .iter()
+                .filter(|state| state.state == "established")
+                .count()
+                >= 2
+        );
+        assert!(trace.events.iter().any(|event| matches!(
+            event,
+            TraceEvent::DistributedDeliver { label, .. } if label == "ACK"
+        )));
+        assert_valid_distributed_trace(&trace);
+    }
+
+    #[test]
+    fn handshake_rejects_same_initiator_and_responder() {
+        let error = trace_handshake(DistributedInput {
+            peers: vec![
+                DistributedPeer {
+                    id: "a".to_string(),
+                    label: "A".to_string(),
+                },
+                DistributedPeer {
+                    id: "b".to_string(),
+                    label: "B".to_string(),
+                },
+            ],
+            initiator: "a".to_string(),
+            responder: "a".to_string(),
+            latency_ms: 80,
+        })
+        .expect_err("invalid handshake input");
+
+        assert!(error.message().contains("different"));
+    }
+
+    #[test]
     fn example_requests_generate_valid_traces() {
         for algorithm in [
             AlgorithmId::Quicksort,
@@ -6285,6 +6678,7 @@ mod tests {
             AlgorithmId::BoyerMoore,
             AlgorithmId::Levenshtein,
             AlgorithmId::PrefixTrie,
+            AlgorithmId::Handshake,
         ] {
             let trace = generate_trace(example_request(algorithm)).expect("trace");
             match algorithm {
@@ -6317,6 +6711,7 @@ mod tests {
                 AlgorithmId::Kmp | AlgorithmId::BoyerMoore | AlgorithmId::Levenshtein => {
                     assert_valid_sequence_trace(&trace)
                 }
+                AlgorithmId::Handshake => assert_valid_distributed_trace(&trace),
             }
         }
     }
@@ -6654,5 +7049,89 @@ mod tests {
             assert!(matrix.iter().all(|row| row.len() == pattern_len + 1));
             assert!(matrix[text_len][pattern_len].is_some());
         }
+    }
+
+    fn assert_valid_distributed_trace(trace: &Trace) {
+        let VisualizationState::Distributed {
+            peers,
+            states,
+            messages,
+        } = &trace.initial_state
+        else {
+            panic!("distributed trace must start with a distributed state");
+        };
+        assert_eq!(trace.algorithm, AlgorithmId::Handshake);
+        assert_eq!(trace.metadata.event_count, trace.events.len());
+
+        let peer_ids = peers
+            .iter()
+            .map(|peer| peer.id.as_str())
+            .collect::<HashSet<_>>();
+        assert!(
+            states
+                .iter()
+                .all(|state| peer_ids.contains(state.peer.as_str()))
+        );
+        assert!(messages.is_empty());
+
+        let mut known_messages = HashSet::<String>::new();
+        for event in &trace.events {
+            match event {
+                TraceEvent::DistributedState { peer, state, .. } => {
+                    assert!(peer_ids.contains(peer.as_str()));
+                    assert!(!state.trim().is_empty());
+                }
+                TraceEvent::DistributedSend {
+                    message_id,
+                    from,
+                    to,
+                    label,
+                    sent_at,
+                    deliver_at,
+                    ..
+                } => {
+                    assert!(known_messages.insert(message_id.clone()));
+                    assert!(peer_ids.contains(from.as_str()));
+                    assert!(peer_ids.contains(to.as_str()));
+                    assert_ne!(from, to);
+                    assert!(!label.trim().is_empty());
+                    assert!(sent_at < deliver_at);
+                }
+                TraceEvent::DistributedDeliver {
+                    message_id,
+                    from,
+                    to,
+                    label,
+                    ..
+                } => {
+                    assert!(known_messages.contains(message_id));
+                    assert!(peer_ids.contains(from.as_str()));
+                    assert!(peer_ids.contains(to.as_str()));
+                    assert_ne!(from, to);
+                    assert!(!label.trim().is_empty());
+                }
+                _ => panic!("distributed trace contains non-distributed event: {event:?}"),
+            }
+        }
+
+        let VisualizationState::Distributed {
+            peers: final_peers,
+            states: final_states,
+            messages: final_messages,
+        } = &trace.final_state
+        else {
+            panic!("distributed trace must finish with distributed state");
+        };
+        assert_eq!(final_peers.len(), peers.len());
+        assert!(
+            final_states
+                .iter()
+                .all(|state| peer_ids.contains(state.peer.as_str()))
+        );
+        assert!(final_messages.iter().all(|message| {
+            peer_ids.contains(message.from.as_str())
+                && peer_ids.contains(message.to.as_str())
+                && known_messages.contains(&message.id)
+        }));
     }
 }

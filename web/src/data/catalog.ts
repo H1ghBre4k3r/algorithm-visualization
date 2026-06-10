@@ -257,7 +257,7 @@ export const algorithms: AlgorithmCatalogItem[] = [
     id: "handshake",
     label: "Handshake Protocol",
     category: "distributed",
-    status: "planned",
+    status: "available",
     summary: "Visualize peer state transitions and message exchange.",
   },
   {

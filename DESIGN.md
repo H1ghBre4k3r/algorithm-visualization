@@ -69,3 +69,7 @@ Reference: https://impeccable.style
   - Edit operation costs: amber/red/violet for insertion, deletion, and substitution.
   - Trie construction: amber character edges, blue active prefix depth, green terminal words.
   - Final matches: green.
+- Distributed:
+  - Peer lanes: restrained horizontal tracks with compact state badges.
+  - In-flight messages: amber when active, green once part of a completed exchange.
+  - Session states: blue for half-open handshake states, green for established peers.

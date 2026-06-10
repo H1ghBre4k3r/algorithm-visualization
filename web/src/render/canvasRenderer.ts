@@ -1,4 +1,4 @@
-import type { GraphEdge, GraphNode, Trace, TraceEvent } from "../types";
+import type { DistributedMessage, GraphEdge, GraphNode, Trace, TraceEvent } from "../types";
 
 const palette = {
   ink: "#172033",
@@ -81,6 +81,10 @@ export function drawTrace(canvas: HTMLCanvasElement, trace: Trace, step: number)
 
   if (trace.algorithm === "levenshtein" && trace.initialState.type === "sequence") {
     drawEditDistanceTrace(context, width, height, trace, step);
+  }
+
+  if (trace.algorithm === "handshake" && trace.initialState.type === "distributed") {
+    drawDistributedTrace(context, width, height, trace, step);
   }
 }
 
@@ -413,6 +417,168 @@ function isPathEdge(edge: GraphEdge, path: string[]) {
     if (!edge.directed && edge.from === to && edge.to === from) return true;
   }
   return false;
+}
+
+function drawDistributedTrace(
+  context: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  trace: Trace,
+  step: number,
+) {
+  if (trace.initialState.type !== "distributed") {
+    return;
+  }
+
+  const state = trace.initialState;
+  const frame = deriveDistributedFrame(trace, step);
+  const paddingX = 44;
+  const labelWidth = Math.min(150, Math.max(96, width * 0.18));
+  const timelineLeft = paddingX + labelWidth;
+  const timelineRight = width - paddingX;
+  const top = 48;
+  const laneGap = state.peers.length <= 1 ? 0 : (height - top * 2) / (state.peers.length - 1);
+  const positions = new Map(
+    state.peers.map((peer, index) => [
+      peer.id,
+      {
+        x: timelineLeft,
+        y: top + laneGap * index,
+      },
+    ]),
+  );
+
+  context.save();
+  context.strokeStyle = "rgba(47, 64, 95, 0.18)";
+  context.lineWidth = 2;
+  context.font = "13px Inter, system-ui, sans-serif";
+  context.textBaseline = "middle";
+
+  for (const peer of state.peers) {
+    const position = positions.get(peer.id);
+    if (!position) continue;
+    const peerState = frame.states.get(peer.id) ?? "idle";
+
+    context.strokeStyle = "rgba(47, 64, 95, 0.18)";
+    context.beginPath();
+    context.moveTo(timelineLeft, position.y);
+    context.lineTo(timelineRight, position.y);
+    context.stroke();
+
+    context.fillStyle = palette.ink;
+    context.textAlign = "right";
+    context.font = "700 14px Inter, system-ui, sans-serif";
+    context.fillText(peer.label, timelineLeft - 18, position.y - 9);
+
+    context.fillStyle = stateColor(peerState);
+    roundedRect(context, timelineLeft - 98, position.y + 5, 80, 22, 6);
+    context.fill();
+    context.fillStyle = "#ffffff";
+    context.textAlign = "center";
+    context.font = "11px Inter, system-ui, sans-serif";
+    context.fillText(peerState, timelineLeft - 58, position.y + 16);
+  }
+
+  for (const message of frame.messages) {
+    drawDistributedMessage(context, message, positions, timelineLeft, timelineRight, frame.activeMessageId);
+  }
+
+  context.restore();
+}
+
+interface DistributedFrame {
+  states: Map<string, string>;
+  messages: DistributedMessage[];
+  activeMessageId: string | null;
+}
+
+function deriveDistributedFrame(trace: Trace, step: number): DistributedFrame {
+  const states = new Map<string, string>();
+  const messages: DistributedMessage[] = [];
+  let activeMessageId: string | null = null;
+
+  if (trace.initialState.type === "distributed") {
+    for (const item of trace.initialState.states) {
+      states.set(item.peer, item.state);
+    }
+  }
+
+  for (let index = 0; index < Math.min(step, trace.events.length); index += 1) {
+    const event = trace.events[index];
+    activeMessageId = null;
+
+    if (event.type === "distributedState") {
+      states.set(event.peer, event.state);
+    }
+    if (event.type === "distributedSend") {
+      messages.push({
+        id: event.messageId,
+        from: event.from,
+        to: event.to,
+        label: event.label,
+        sentAt: event.sentAt,
+        deliverAt: event.deliverAt,
+      });
+      activeMessageId = event.messageId;
+    }
+    if (event.type === "distributedDeliver") {
+      activeMessageId = event.messageId;
+    }
+  }
+
+  return { states, messages, activeMessageId };
+}
+
+function drawDistributedMessage(
+  context: CanvasRenderingContext2D,
+  message: DistributedMessage,
+  positions: Map<string, { x: number; y: number }>,
+  timelineLeft: number,
+  timelineRight: number,
+  activeMessageId: string | null,
+) {
+  const from = positions.get(message.from);
+  const to = positions.get(message.to);
+  if (!from || !to) return;
+
+  const maxTime = Math.max(1, message.deliverAt);
+  const startX = timelineLeft + (message.sentAt / maxTime) * (timelineRight - timelineLeft) * 0.72;
+  const endX = timelineLeft + (message.deliverAt / maxTime) * (timelineRight - timelineLeft) * 0.72 + 54;
+  const active = activeMessageId === message.id;
+  const color = active ? palette.compare : palette.path;
+
+  context.strokeStyle = color;
+  context.lineWidth = active ? 4 : 3;
+  context.beginPath();
+  context.moveTo(startX, from.y);
+  context.bezierCurveTo(
+    (startX + endX) / 2,
+    from.y,
+    (startX + endX) / 2,
+    to.y,
+    endX,
+    to.y,
+  );
+  context.stroke();
+  drawArrowHead(context, { x: (startX + endX) / 2, y: (from.y + to.y) / 2 }, { x: endX, y: to.y }, color);
+
+  const labelX = (startX + endX) / 2;
+  const labelY = (from.y + to.y) / 2 - 12;
+  context.font = "700 12px Inter, system-ui, sans-serif";
+  context.textAlign = "center";
+  context.textBaseline = "middle";
+  const metrics = context.measureText(message.label);
+  context.fillStyle = "rgba(255, 255, 255, 0.92)";
+  roundedRect(context, labelX - metrics.width / 2 - 8, labelY - 11, metrics.width + 16, 22, 6);
+  context.fill();
+  context.fillStyle = palette.ink;
+  context.fillText(message.label, labelX, labelY);
+}
+
+function stateColor(state: string) {
+  if (state === "established") return palette.path;
+  if (state === "syn-sent" || state === "syn-received") return palette.source;
+  return palette.muted;
 }
 
 function drawSequenceTrace(

@@ -1,4 +1,11 @@
-import type { AlgorithmRequest, AvailableAlgorithmId, GraphInput, SequenceInput, SortInput } from "../types";
+import type {
+  AlgorithmRequest,
+  AvailableAlgorithmId,
+  DistributedInput,
+  GraphInput,
+  SequenceInput,
+  SortInput,
+} from "../types";
 
 export const exampleSortInput: SortInput = {
   values: [42, 12, 77, 18, 93, 31, 64, 5, 56, 29],
@@ -78,6 +85,17 @@ export const examplePrefixTrieInput: SequenceInput = {
   text: "",
   pattern: "",
   words: ["tea", "team", "ted", "ten", "to", "ton"],
+};
+
+export const exampleHandshakeInput: DistributedInput = {
+  peers: [
+    { id: "client", label: "Client" },
+    { id: "server", label: "Server" },
+    { id: "observer", label: "Observer" },
+  ],
+  initiator: "client",
+  responder: "server",
+  latencyMs: 120,
 };
 
 export function exampleRequest(algorithm: AvailableAlgorithmId): AlgorithmRequest {
@@ -186,6 +204,15 @@ export function exampleRequest(algorithm: AvailableAlgorithmId): AlgorithmReques
     };
   }
 
+  if (algorithm === "handshake") {
+    return {
+      algorithm,
+      inputMode: "example",
+      input: { type: "distributed", value: structuredClone(exampleHandshakeInput) },
+      options: { type: "handshake", value: {} },
+    };
+  }
+
   if (algorithm === "bfs" || algorithm === "dfs") {
     return {
       algorithm,
@@ -264,6 +291,8 @@ export function customTemplate(algorithm: AvailableAlgorithmId): string {
           ? exampleEditDistanceInput
         : algorithm === "prefixTrie"
           ? examplePrefixTrieInput
+        : algorithm === "handshake"
+          ? exampleHandshakeInput
           : algorithm === "topologicalSort"
             ? exampleDagInput
           : exampleGraphInput;

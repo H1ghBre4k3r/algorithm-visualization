@@ -1,5 +1,7 @@
 import type {
   AvailableAlgorithmId,
+  DistributedInput,
+  DistributedPeer,
   GraphEdge,
   GraphInput,
   GraphNode,
@@ -52,6 +54,9 @@ export function parseCustomInput(algorithm: AvailableAlgorithmId, raw: string): 
   }
   if (algorithm === "prefixTrie") {
     return { type: "sequence", value: parsePrefixTrieInput(raw) };
+  }
+  if (algorithm === "handshake") {
+    return { type: "distributed", value: parseDistributedInput(raw) };
   }
   const graphInput = parseGraphInput(raw);
   if (algorithm === "topologicalSort") {
@@ -212,6 +217,55 @@ export function parsePrefixTrieInput(raw: string): SequenceInput {
   });
 
   return { text: "", pattern: "", words };
+}
+
+export function parseDistributedInput(raw: string): DistributedInput {
+  const parsed = readRecord(parseJson(raw));
+  const peersRaw = parsed.peers;
+  const initiator = readString(parsed.initiator, "Handshake initiator");
+  const responder = readString(parsed.responder, "Handshake responder");
+  const latencyMs = parsed.latencyMs === undefined ? 120 : parsed.latencyMs;
+
+  if (!Array.isArray(peersRaw) || peersRaw.length < 2) {
+    throw new InputValidationError("Handshake input needs at least two peers.");
+  }
+  if (peersRaw.length > 8) {
+    throw new InputValidationError("Handshake supports up to 8 peers.");
+  }
+  if (
+    typeof latencyMs !== "number" ||
+    !Number.isFinite(latencyMs) ||
+    !Number.isInteger(latencyMs) ||
+    latencyMs < 0
+  ) {
+    throw new InputValidationError("Handshake latencyMs must be a non-negative integer.");
+  }
+
+  const seen = new Set<string>();
+  const peers = peersRaw.map((value, index) => parseDistributedPeer(value, index, seen));
+  const peerIds = new Set(peers.map((peer) => peer.id));
+  if (!peerIds.has(initiator)) {
+    throw new InputValidationError(`Initiator peer '${initiator}' does not exist.`);
+  }
+  if (!peerIds.has(responder)) {
+    throw new InputValidationError(`Responder peer '${responder}' does not exist.`);
+  }
+  if (initiator === responder) {
+    throw new InputValidationError("Initiator and responder must be different peers.");
+  }
+
+  return { peers, initiator, responder, latencyMs };
+}
+
+function parseDistributedPeer(value: unknown, index: number, seen: Set<string>): DistributedPeer {
+  const peer = readRecord(value, `Peer ${index}`);
+  const id = readString(peer.id, `Peer ${index} id`);
+  const label = readString(peer.label, `Peer ${id} label`);
+  if (seen.has(id)) {
+    throw new InputValidationError(`Duplicate peer id '${id}'.`);
+  }
+  seen.add(id);
+  return { id, label };
 }
 
 function parseNode(value: unknown, index: number): GraphNode {

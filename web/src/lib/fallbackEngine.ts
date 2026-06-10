@@ -1,5 +1,8 @@
 import type {
   AlgorithmRequest,
+  DistributedInput,
+  DistributedMessage,
+  DistributedPeerState,
   GraphEdge,
   GraphInput,
   NodeDistance,
@@ -129,6 +132,10 @@ export function generateTraceFallback(request: AlgorithmRequest): Trace {
 
   if (request.algorithm === "prefixTrie" && request.input.type === "sequence") {
     return tracePrefixTrie(request.input.value);
+  }
+
+  if (request.algorithm === "handshake" && request.input.type === "distributed") {
+    return traceHandshake(request.input.value);
   }
 
   throw new Error("Algorithm and input type do not match.");
@@ -3436,6 +3443,146 @@ function layoutTrieNodes(nodes: TrieBuildNode[]) {
   });
 }
 
+function traceHandshake(input: DistributedInput): Trace {
+  validateDistributedInput(input);
+
+  const latency = Math.max(40, input.latencyMs ?? 120);
+  const events: TraceEvent[] = [];
+  const messages: DistributedMessage[] = [];
+  const states = input.peers.map<DistributedPeerState>((peer) => ({ peer: peer.id, state: "idle" }));
+
+  pushDistributedState(events, states, input.initiator, "syn-sent", "Initiator opens the handshake and prepares a SYN.");
+  pushDistributedMessage(
+    events,
+    messages,
+    {
+      id: "syn",
+      from: input.initiator,
+      to: input.responder,
+      label: "SYN",
+      sentAt: 0,
+      deliverAt: latency,
+    },
+    "Send SYN from initiator to responder.",
+  );
+  events.push({
+    type: "distributedDeliver",
+    messageId: "syn",
+    from: input.initiator,
+    to: input.responder,
+    label: "SYN",
+    message: "Responder receives SYN and allocates connection state.",
+  });
+  pushDistributedState(events, states, input.responder, "syn-received", "Responder records the half-open connection.");
+
+  pushDistributedMessage(
+    events,
+    messages,
+    {
+      id: "synAck",
+      from: input.responder,
+      to: input.initiator,
+      label: "SYN-ACK",
+      sentAt: latency,
+      deliverAt: latency * 2,
+    },
+    "Responder replies with SYN-ACK.",
+  );
+  events.push({
+    type: "distributedDeliver",
+    messageId: "synAck",
+    from: input.responder,
+    to: input.initiator,
+    label: "SYN-ACK",
+    message: "Initiator receives SYN-ACK and confirms the responder is ready.",
+  });
+  pushDistributedState(events, states, input.initiator, "established", "Initiator marks the session established.");
+
+  pushDistributedMessage(
+    events,
+    messages,
+    {
+      id: "ack",
+      from: input.initiator,
+      to: input.responder,
+      label: "ACK",
+      sentAt: latency * 2,
+      deliverAt: latency * 3,
+    },
+    "Initiator sends the final ACK.",
+  );
+  events.push({
+    type: "distributedDeliver",
+    messageId: "ack",
+    from: input.initiator,
+    to: input.responder,
+    label: "ACK",
+    message: "Responder receives ACK and completes the handshake.",
+  });
+  pushDistributedState(events, states, input.responder, "established", "Responder marks the session established.");
+
+  const initialStates = input.peers.map<DistributedPeerState>((peer) => ({ peer: peer.id, state: "idle" }));
+  return {
+    algorithm: "handshake",
+    initialState: {
+      type: "distributed",
+      peers: input.peers,
+      states: initialStates,
+      messages: [],
+    },
+    finalState: {
+      type: "distributed",
+      peers: input.peers,
+      states,
+      messages,
+    },
+    events,
+    metadata: {
+      algorithmName: "Handshake Protocol",
+      category: "Distributed",
+      inputSize: input.peers.length,
+      eventCount: events.length,
+      resultSummary: `${input.initiator} and ${input.responder} established a session in three messages.`,
+    },
+  };
+}
+
+function pushDistributedState(
+  events: TraceEvent[],
+  states: DistributedPeerState[],
+  peer: string,
+  state: string,
+  message: string,
+) {
+  const item = states.find((candidate) => candidate.peer === peer);
+  if (item) item.state = state;
+  events.push({
+    type: "distributedState",
+    peer,
+    state,
+    message,
+  });
+}
+
+function pushDistributedMessage(
+  events: TraceEvent[],
+  messages: DistributedMessage[],
+  distributedMessage: DistributedMessage,
+  message: string,
+) {
+  events.push({
+    type: "distributedSend",
+    messageId: distributedMessage.id,
+    from: distributedMessage.from,
+    to: distributedMessage.to,
+    label: distributedMessage.label,
+    sentAt: distributedMessage.sentAt,
+    deliverAt: distributedMessage.deliverAt,
+    message,
+  });
+  messages.push(distributedMessage);
+}
+
 interface AdjacentEdge {
   edgeId: string;
   to: string;
@@ -3709,6 +3856,38 @@ function validatePrefixTrie(input: SequenceInput) {
     if (Array.from(word).length > 18) {
       throw new Error(`Prefix Tree word at index ${index} is capped at 18 characters.`);
     }
+  }
+}
+
+function validateDistributedInput(input: DistributedInput) {
+  if (input.peers.length < 2) {
+    throw new Error("Handshake Protocol needs at least two peers.");
+  }
+  if (input.peers.length > 8) {
+    throw new Error("Handshake Protocol is capped at 8 peers for interactive playback.");
+  }
+
+  const peerIds = new Set<string>();
+  for (const peer of input.peers) {
+    if (peer.id.trim() === "") {
+      throw new Error("Peer ids cannot be empty.");
+    }
+    if (peer.label.trim() === "") {
+      throw new Error(`Peer '${peer.id}' needs a non-empty label.`);
+    }
+    if (peerIds.has(peer.id)) {
+      throw new Error(`Duplicate peer id '${peer.id}'.`);
+    }
+    peerIds.add(peer.id);
+  }
+  if (!peerIds.has(input.initiator)) {
+    throw new Error(`Initiator peer '${input.initiator}' does not exist.`);
+  }
+  if (!peerIds.has(input.responder)) {
+    throw new Error(`Responder peer '${input.responder}' does not exist.`);
+  }
+  if (input.initiator === input.responder) {
+    throw new Error("Initiator and responder must be different peers.");
   }
 }
 

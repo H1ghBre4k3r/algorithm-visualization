@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   parseBoyerMooreInput,
   parseCustomInput,
+  parseDistributedInput,
   parseEditDistanceInput,
   parseGraphInput,
   parseKmpInput,
@@ -267,5 +268,40 @@ describe("parsePrefixTrieInput", () => {
 
   it("rejects empty words", () => {
     expect(() => parsePrefixTrieInput('{"words":["tea",""]}')).toThrow("cannot be empty");
+  });
+});
+
+describe("parseDistributedInput", () => {
+  const handshake = {
+    peers: [
+      { id: "client", label: "Client" },
+      { id: "server", label: "Server" },
+    ],
+    initiator: "client",
+    responder: "server",
+    latencyMs: 100,
+  };
+
+  it("accepts handshake peer input", () => {
+    expect(parseDistributedInput(JSON.stringify(handshake))).toEqual(handshake);
+  });
+
+  it("routes Handshake custom input through the distributed parser", () => {
+    expect(parseCustomInput("handshake", JSON.stringify(handshake))).toEqual({
+      type: "distributed",
+      value: handshake,
+    });
+  });
+
+  it("rejects missing initiator peers", () => {
+    expect(() =>
+      parseDistributedInput(JSON.stringify({ ...handshake, initiator: "missing" })),
+    ).toThrow("does not exist");
+  });
+
+  it("rejects identical initiator and responder", () => {
+    expect(() =>
+      parseDistributedInput(JSON.stringify({ ...handshake, responder: "client" })),
+    ).toThrow("different");
   });
 });

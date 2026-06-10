@@ -27,9 +27,9 @@ export type AvailableAlgorithmId =
   | "kmp"
   | "boyerMoore"
   | "levenshtein"
-  | "prefixTrie";
+  | "prefixTrie"
+  | "handshake";
 export type PlannedAlgorithmId =
-  | "handshake"
   | "timeSync"
   | "paxos";
 export type AlgorithmId = AvailableAlgorithmId | PlannedAlgorithmId;
@@ -45,7 +45,8 @@ export interface AlgorithmRequest {
 export type InputData =
   | { type: "sort"; value: SortInput }
   | { type: "graph"; value: GraphInput }
-  | { type: "sequence"; value: SequenceInput };
+  | { type: "sequence"; value: SequenceInput }
+  | { type: "distributed"; value: DistributedInput };
 
 export type AlgorithmOptions =
   | { type: "quicksort"; value: QuicksortOptions }
@@ -76,7 +77,8 @@ export type AlgorithmOptions =
   | { type: "kmp"; value: KmpOptions }
   | { type: "boyerMoore"; value: BoyerMooreOptions }
   | { type: "levenshtein"; value: LevenshteinOptions }
-  | { type: "prefixTrie"; value: PrefixTrieOptions };
+  | { type: "prefixTrie"; value: PrefixTrieOptions }
+  | { type: "handshake"; value: HandshakeOptions };
 
 export interface QuicksortOptions {
   pivotStrategy: "last";
@@ -122,6 +124,7 @@ export type KmpOptions = Record<string, never>;
 export type BoyerMooreOptions = Record<string, never>;
 export type LevenshteinOptions = Record<string, never>;
 export type PrefixTrieOptions = Record<string, never>;
+export type HandshakeOptions = Record<string, never>;
 
 export interface SortInput {
   values: number[];
@@ -157,6 +160,32 @@ export interface SequenceInput {
   words?: string[];
 }
 
+export interface DistributedInput {
+  peers: DistributedPeer[];
+  initiator: string;
+  responder: string;
+  latencyMs?: number;
+}
+
+export interface DistributedPeer {
+  id: string;
+  label: string;
+}
+
+export interface DistributedPeerState {
+  peer: string;
+  state: string;
+}
+
+export interface DistributedMessage {
+  id: string;
+  from: string;
+  to: string;
+  label: string;
+  sentAt: number;
+  deliverAt: number;
+}
+
 export interface Trace {
   algorithm: AlgorithmId;
   initialState: VisualizationState;
@@ -183,6 +212,12 @@ export type VisualizationState =
       lps: number[];
       matches: number[];
       matrix: Array<Array<number | null>>;
+    }
+  | {
+      type: "distributed";
+      peers: DistributedPeer[];
+      states: DistributedPeerState[];
+      messages: DistributedMessage[];
     };
 
 export interface NodeDistance {
@@ -325,5 +360,29 @@ export type TraceEvent =
       value: number;
       operation: string;
       matrix: Array<Array<number | null>>;
+      message: string;
+    }
+  | {
+      type: "distributedState";
+      peer: string;
+      state: string;
+      message: string;
+    }
+  | {
+      type: "distributedSend";
+      messageId: string;
+      from: string;
+      to: string;
+      label: string;
+      sentAt: number;
+      deliverAt: number;
+      message: string;
+    }
+  | {
+      type: "distributedDeliver";
+      messageId: string;
+      from: string;
+      to: string;
+      label: string;
       message: string;
     };
