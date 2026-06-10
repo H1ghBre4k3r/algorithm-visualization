@@ -72,6 +72,16 @@ npm run dev
 
 Generated WASM files are written to `web/src/wasm-pkg` and are ignored by git.
 
+## Deploy
+
+Production deployment artifacts live in `deploy/`.
+
+```bash
+docker compose up --build
+```
+
+For K3s, build and push the image, update the image/host in `deploy/kubernetes`, then apply the kustomization. The provided ingress targets K3s' default Traefik controller.
+
 ## Verification
 
 ```bash

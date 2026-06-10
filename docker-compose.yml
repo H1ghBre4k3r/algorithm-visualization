@@ -1,0 +1,8 @@
+services:
+  algorithm-visualization:
+    build:
+      context: .
+    image: algorithm-visualization:local
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
