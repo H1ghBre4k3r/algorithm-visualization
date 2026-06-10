@@ -28,13 +28,15 @@ button {
 }
 
 .app-shell {
-  min-height: 100vh;
+  height: 100vh;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   background: #e7ebf0;
 }
 
 .topbar {
+  flex: 0 0 auto;
   min-height: 74px;
   padding: 14px 18px;
   display: flex;
@@ -142,16 +144,20 @@ button {
   min-height: 0;
   display: grid;
   grid-template-columns: minmax(292px, 360px) minmax(0, 1fr);
+  overflow: hidden;
 }
 
 .control-panel {
   min-height: 0;
-  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   background: #fbfcfe;
   border-right: 1px solid rgba(23, 32, 51, 0.12);
 }
 
 .control-section {
+  flex: 0 0 auto;
   padding: 18px;
   border-bottom: 1px solid rgba(23, 32, 51, 0.1);
 }
@@ -166,6 +172,14 @@ button {
   gap: 12px;
 }
 
+.control-panel > .control-section:first-child {
+  min-height: 84px;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
 .section-row {
   display: flex;
   align-items: center;
@@ -178,8 +192,12 @@ button {
 }
 
 .algorithm-list {
+  min-height: 0;
   display: grid;
+  align-content: start;
   gap: 8px;
+  overflow: auto;
+  padding-right: 3px;
 }
 
 .algorithm-option {
@@ -282,7 +300,8 @@ button {
 
 textarea {
   width: 100%;
-  min-height: 280px;
+  min-height: 96px;
+  max-height: 18vh;
   resize: vertical;
   padding: 12px;
   border: 1px solid rgba(23, 32, 51, 0.18);
@@ -363,12 +382,16 @@ button:disabled {
   min-height: 0;
   padding: 18px;
   display: grid;
-  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-rows: auto auto;
+  align-content: start;
   gap: 14px;
+  overflow: auto;
 }
 
 .canvas-shell {
-  min-height: 420px;
+  width: 100%;
+  height: clamp(320px, calc(100vh - 220px), 680px);
+  min-height: 0;
   position: relative;
   overflow: hidden;
   border: 1px solid rgba(23, 32, 51, 0.12);
@@ -417,6 +440,11 @@ button:disabled {
 }
 
 @media (max-width: 900px) {
+  .app-shell {
+    height: auto;
+    min-height: 100vh;
+  }
+
   .topbar {
     align-items: flex-start;
     flex-direction: column;
@@ -434,15 +462,39 @@ button:disabled {
 
   .workspace {
     grid-template-columns: 1fr;
+    overflow: visible;
   }
 
   .control-panel {
+    display: block;
+    overflow: visible;
     border-right: 0;
     border-bottom: 1px solid rgba(23, 32, 51, 0.12);
   }
 
+  .control-panel > .control-section:first-child {
+    display: block;
+    min-height: 0;
+    overflow: visible;
+  }
+
+  .algorithm-list {
+    overflow: visible;
+    padding-right: 0;
+  }
+
+  .visual-area {
+    overflow: visible;
+  }
+
   .canvas-shell {
+    height: auto;
     min-height: 360px;
+  }
+
+  textarea {
+    min-height: 240px;
+    max-height: none;
   }
 }
 
