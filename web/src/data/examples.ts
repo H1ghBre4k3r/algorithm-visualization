@@ -74,6 +74,12 @@ export const exampleEditDistanceInput: SequenceInput = {
   pattern: "sitting",
 };
 
+export const examplePrefixTrieInput: SequenceInput = {
+  text: "",
+  pattern: "",
+  words: ["tea", "team", "ted", "ten", "to", "ton"],
+};
+
 export function exampleRequest(algorithm: AvailableAlgorithmId): AlgorithmRequest {
   if (
     algorithm === "quicksort" ||
@@ -171,6 +177,15 @@ export function exampleRequest(algorithm: AvailableAlgorithmId): AlgorithmReques
     };
   }
 
+  if (algorithm === "prefixTrie") {
+    return {
+      algorithm,
+      inputMode: "example",
+      input: { type: "sequence", value: structuredClone(examplePrefixTrieInput) },
+      options: { type: "prefixTrie", value: {} },
+    };
+  }
+
   if (algorithm === "bfs" || algorithm === "dfs") {
     return {
       algorithm,
@@ -247,6 +262,8 @@ export function customTemplate(algorithm: AvailableAlgorithmId): string {
           ? exampleBoyerMooreInput
         : algorithm === "levenshtein"
           ? exampleEditDistanceInput
+        : algorithm === "prefixTrie"
+          ? examplePrefixTrieInput
           : algorithm === "topologicalSort"
             ? exampleDagInput
           : exampleGraphInput;

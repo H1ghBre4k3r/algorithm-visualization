@@ -32,6 +32,7 @@ Browser-first algorithm visualization MVP with a Rust trace core, WASM bindings,
 - Knuth-Morris-Pratt trace generation and sequence/prefix-table visualization.
 - Boyer-Moore trace generation and right-to-left string-search visualization.
 - Levenshtein Distance trace generation and dynamic-programming table visualization.
+- Prefix Tree trace generation and shared-prefix trie visualization.
 - Example, random, and custom JSON inputs.
 - Playback controls for play, pause, step, reset, and speed.
 - Rust unit tests for algorithm correctness and trace shape.

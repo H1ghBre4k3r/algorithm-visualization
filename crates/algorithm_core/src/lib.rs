@@ -34,6 +34,7 @@ pub enum AlgorithmId {
     Kmp,
     BoyerMoore,
     Levenshtein,
+    PrefixTrie,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -93,6 +94,7 @@ pub enum AlgorithmOptions {
     Kmp(KmpOptions),
     BoyerMoore(BoyerMooreOptions),
     Levenshtein(LevenshteinOptions),
+    PrefixTrie(PrefixTrieOptions),
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -230,6 +232,10 @@ pub struct BoyerMooreOptions {}
 #[serde(rename_all = "camelCase")]
 pub struct LevenshteinOptions {}
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct PrefixTrieOptions {}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SortInput {
@@ -265,14 +271,20 @@ pub struct GraphEdge {
     pub to: String,
     pub weight: u32,
     #[serde(default)]
+    pub label: Option<String>,
+    #[serde(default)]
     pub directed: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SequenceInput {
+    #[serde(default)]
     pub text: String,
+    #[serde(default)]
     pub pattern: String,
+    #[serde(default)]
+    pub words: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -529,6 +541,7 @@ pub fn generate_trace(request: AlgorithmRequest) -> Result<Trace, AlgorithmError
         (AlgorithmId::Kmp, InputData::Sequence(input)) => trace_kmp(input),
         (AlgorithmId::BoyerMoore, InputData::Sequence(input)) => trace_boyer_moore(input),
         (AlgorithmId::Levenshtein, InputData::Sequence(input)) => trace_levenshtein(input),
+        (AlgorithmId::PrefixTrie, InputData::Sequence(input)) => trace_prefix_trie(input),
         (AlgorithmId::Quicksort, _) => Err(AlgorithmError::new(
             "Quicksort requires sort input with a values array.",
         )),
@@ -612,6 +625,9 @@ pub fn generate_trace(request: AlgorithmRequest) -> Result<Trace, AlgorithmError
         )),
         (AlgorithmId::Levenshtein, _) => Err(AlgorithmError::new(
             "Levenshtein Distance requires sequence input with text and pattern.",
+        )),
+        (AlgorithmId::PrefixTrie, _) => Err(AlgorithmError::new(
+            "Prefix Tree requires sequence input with a words array.",
         )),
     }
 }
@@ -845,6 +861,7 @@ pub fn example_request(algorithm: AlgorithmId) -> AlgorithmRequest {
             input: InputData::Sequence(SequenceInput {
                 text: "ababcabcabababd".to_string(),
                 pattern: "ababd".to_string(),
+                words: Vec::new(),
             }),
             options: Some(AlgorithmOptions::Kmp(KmpOptions::default())),
         },
@@ -854,6 +871,7 @@ pub fn example_request(algorithm: AlgorithmId) -> AlgorithmRequest {
             input: InputData::Sequence(SequenceInput {
                 text: "here is a simple example".to_string(),
                 pattern: "example".to_string(),
+                words: Vec::new(),
             }),
             options: Some(AlgorithmOptions::BoyerMoore(BoyerMooreOptions::default())),
         },
@@ -863,8 +881,26 @@ pub fn example_request(algorithm: AlgorithmId) -> AlgorithmRequest {
             input: InputData::Sequence(SequenceInput {
                 text: "kitten".to_string(),
                 pattern: "sitting".to_string(),
+                words: Vec::new(),
             }),
             options: Some(AlgorithmOptions::Levenshtein(LevenshteinOptions::default())),
+        },
+        AlgorithmId::PrefixTrie => AlgorithmRequest {
+            algorithm,
+            input_mode: InputMode::Example,
+            input: InputData::Sequence(SequenceInput {
+                text: String::new(),
+                pattern: String::new(),
+                words: vec![
+                    "tea".to_string(),
+                    "team".to_string(),
+                    "ted".to_string(),
+                    "ten".to_string(),
+                    "to".to_string(),
+                    "ton".to_string(),
+                ],
+            }),
+            options: Some(AlgorithmOptions::PrefixTrie(PrefixTrieOptions::default())),
         },
     }
 }
@@ -4298,6 +4334,223 @@ fn validate_boyer_moore_sequence(input: &SequenceInput) -> Result<(), AlgorithmE
     Ok(())
 }
 
+#[derive(Debug, Clone)]
+struct TrieBuildNode {
+    id: String,
+    label: String,
+    depth: usize,
+    terminal: bool,
+    children: HashMap<char, usize>,
+}
+
+pub fn trace_prefix_trie(input: SequenceInput) -> Result<Trace, AlgorithmError> {
+    validate_prefix_trie_sequence(&input)?;
+
+    let mut trie_nodes = vec![TrieBuildNode {
+        id: "n0".to_string(),
+        label: "root".to_string(),
+        depth: 0,
+        terminal: false,
+        children: HashMap::new(),
+    }];
+    let mut edges = Vec::new();
+    let mut events = Vec::new();
+
+    for (word_index, word) in input.words.iter().enumerate() {
+        let mut current = 0_usize;
+        events.push(TraceEvent::GraphVisit {
+            node: trie_nodes[current].id.clone(),
+            distance: word_index as u32,
+            message: format!("Start inserting word '{}' at the root.", word),
+        });
+
+        for character in word.chars() {
+            if let Some(next) = trie_nodes[current].children.get(&character).copied() {
+                let edge_id = trie_edge_id(current, next);
+                events.push(TraceEvent::GraphConsiderEdge {
+                    edge_id,
+                    from: trie_nodes[current].id.clone(),
+                    to: trie_nodes[next].id.clone(),
+                    weight: 1,
+                    message: format!(
+                        "Follow existing edge '{}' for character '{}'.",
+                        character, character
+                    ),
+                });
+                current = next;
+                events.push(TraceEvent::GraphVisit {
+                    node: trie_nodes[current].id.clone(),
+                    distance: trie_nodes[current].depth as u32,
+                    message: format!(
+                        "Reuse node '{}' for prefix ending in '{}'.",
+                        trie_nodes[current].label, character
+                    ),
+                });
+                continue;
+            }
+
+            let next = trie_nodes.len();
+            let next_id = format!("n{next}");
+            let edge_id = trie_edge_id(current, next);
+            trie_nodes.push(TrieBuildNode {
+                id: next_id.clone(),
+                label: character.to_string(),
+                depth: trie_nodes[current].depth + 1,
+                terminal: false,
+                children: HashMap::new(),
+            });
+            trie_nodes[current].children.insert(character, next);
+            edges.push(GraphEdge {
+                id: edge_id.clone(),
+                from: trie_nodes[current].id.clone(),
+                to: next_id.clone(),
+                weight: 1,
+                label: Some(character.to_string()),
+                directed: true,
+            });
+            events.push(TraceEvent::GraphSelectEdge {
+                edge_id,
+                from: trie_nodes[current].id.clone(),
+                to: next_id,
+                weight: 1,
+                total_weight: edges.len() as u32,
+                message: format!(
+                    "Create node for character '{}' and attach it to the trie.",
+                    character
+                ),
+            });
+            current = next;
+        }
+
+        trie_nodes[current].terminal = true;
+        events.push(TraceEvent::GraphSettle {
+            node: trie_nodes[current].id.clone(),
+            distance: word.chars().count() as u32,
+            message: format!("Mark '{}' as a complete word.", word),
+        });
+    }
+
+    let graph_nodes = layout_trie_nodes(&trie_nodes);
+    let distances = trie_nodes
+        .iter()
+        .map(|node| NodeDistance {
+            node: node.id.clone(),
+            distance: Some(node.depth as u32),
+        })
+        .collect::<Vec<_>>();
+    let terminal_path = trie_nodes
+        .iter()
+        .filter(|node| node.terminal)
+        .map(|node| node.id.clone())
+        .collect::<Vec<_>>();
+
+    events.push(TraceEvent::GraphPath {
+        nodes: terminal_path.clone(),
+        total_distance: Some(input.words.len() as u32),
+        message: format!("Prefix tree complete with {} word(s).", input.words.len()),
+    });
+
+    let metadata = TraceMetadata {
+        algorithm_name: "Prefix Tree".to_string(),
+        category: "Sequence".to_string(),
+        input_size: input.words.len(),
+        event_count: events.len(),
+        result_summary: format!(
+            "Inserted {} word(s) into {} trie nodes.",
+            input.words.len(),
+            trie_nodes.len()
+        ),
+    };
+
+    Ok(Trace {
+        algorithm: AlgorithmId::PrefixTrie,
+        initial_state: VisualizationState::Graph {
+            nodes: graph_nodes.clone(),
+            edges: edges.clone(),
+            source: "n0".to_string(),
+            target: None,
+            distances: distances.clone(),
+            path: Vec::new(),
+        },
+        final_state: VisualizationState::Graph {
+            nodes: graph_nodes,
+            edges,
+            source: "n0".to_string(),
+            target: None,
+            distances,
+            path: terminal_path,
+        },
+        events,
+        metadata,
+    })
+}
+
+fn trie_edge_id(from: usize, to: usize) -> String {
+    format!("e{from}_{to}")
+}
+
+fn layout_trie_nodes(nodes: &[TrieBuildNode]) -> Vec<GraphNode> {
+    let max_depth = nodes
+        .iter()
+        .map(|node| node.depth)
+        .max()
+        .unwrap_or(0)
+        .max(1);
+    let mut by_depth = HashMap::<usize, Vec<usize>>::new();
+    for (index, node) in nodes.iter().enumerate() {
+        by_depth.entry(node.depth).or_default().push(index);
+    }
+
+    nodes
+        .iter()
+        .enumerate()
+        .map(|(index, node)| {
+            let siblings = by_depth.get(&node.depth).expect("depth bucket exists");
+            let position = siblings
+                .iter()
+                .position(|candidate| *candidate == index)
+                .unwrap_or_default();
+            GraphNode {
+                id: node.id.clone(),
+                label: if node.terminal && node.depth > 0 {
+                    format!("{}*", node.label)
+                } else {
+                    node.label.clone()
+                },
+                x: (position + 1) as f32 / (siblings.len() + 1) as f32,
+                y: node.depth as f32 / (max_depth + 1) as f32,
+            }
+        })
+        .collect()
+}
+
+fn validate_prefix_trie_sequence(input: &SequenceInput) -> Result<(), AlgorithmError> {
+    if input.words.is_empty() {
+        return Err(AlgorithmError::new(
+            "Prefix Tree input needs a non-empty words array.",
+        ));
+    }
+    if input.words.len() > 24 {
+        return Err(AlgorithmError::new(
+            "Prefix Tree supports up to 24 words for interactive playback.",
+        ));
+    }
+    for (index, word) in input.words.iter().enumerate() {
+        if word.trim().is_empty() {
+            return Err(AlgorithmError::new(format!(
+                "Prefix Tree word at index {index} cannot be empty."
+            )));
+        }
+        if word.chars().count() > 18 {
+            return Err(AlgorithmError::new(format!(
+                "Prefix Tree word '{}' is longer than 18 characters.",
+                word
+            )));
+        }
+    }
+    Ok(())
+}
+
 pub fn trace_levenshtein(input: SequenceInput) -> Result<Trace, AlgorithmError> {
     validate_edit_distance_sequence(&input)?;
 
@@ -4762,6 +5015,7 @@ fn edge(id: &str, from: &str, to: &str, weight: u32) -> GraphEdge {
         from: from.to_string(),
         to: to.to_string(),
         weight,
+        label: None,
         directed: false,
     }
 }
@@ -4772,6 +5026,7 @@ fn directed_edge(id: &str, from: &str, to: &str, weight: u32) -> GraphEdge {
         from: from.to_string(),
         to: to.to_string(),
         weight,
+        label: None,
         directed: true,
     }
 }
@@ -5681,6 +5936,7 @@ mod tests {
             from: "A".to_string(),
             to: "Z".to_string(),
             weight: 1,
+            label: None,
             directed: false,
         });
 
@@ -5834,6 +6090,7 @@ mod tests {
         let trace = trace_kmp(SequenceInput {
             text: "ababcabcabababd".to_string(),
             pattern: "ababd".to_string(),
+            words: Vec::new(),
         })
         .expect("trace");
 
@@ -5855,6 +6112,7 @@ mod tests {
         let error = trace_kmp(SequenceInput {
             text: "abc".to_string(),
             pattern: String::new(),
+            words: Vec::new(),
         })
         .expect_err("invalid sequence input");
 
@@ -5866,6 +6124,7 @@ mod tests {
         let trace = trace_boyer_moore(SequenceInput {
             text: "here is a simple example".to_string(),
             pattern: "example".to_string(),
+            words: Vec::new(),
         })
         .expect("trace");
 
@@ -5899,6 +6158,7 @@ mod tests {
         let error = trace_boyer_moore(SequenceInput {
             text: "abc".to_string(),
             pattern: "abcd".to_string(),
+            words: Vec::new(),
         })
         .expect_err("invalid sequence input");
 
@@ -5906,10 +6166,68 @@ mod tests {
     }
 
     #[test]
+    fn prefix_trie_trace_builds_shared_prefix_tree() {
+        let trace = trace_prefix_trie(SequenceInput {
+            text: String::new(),
+            pattern: String::new(),
+            words: vec![
+                "tea".to_string(),
+                "team".to_string(),
+                "ted".to_string(),
+                "ten".to_string(),
+            ],
+        })
+        .expect("trace");
+
+        let VisualizationState::Graph {
+            nodes, edges, path, ..
+        } = &trace.final_state
+        else {
+            panic!("prefix trie must finish with graph state");
+        };
+        assert!(nodes.len() < 1 + "tea".len() + "team".len() + "ted".len() + "ten".len());
+        assert!(edges.iter().all(|edge| edge.directed));
+        assert!(edges.iter().any(|edge| edge.label.as_deref() == Some("t")));
+        assert_eq!(path.len(), 4);
+        assert!(
+            trace
+                .events
+                .iter()
+                .any(|event| matches!(event, TraceEvent::GraphSelectEdge { .. }))
+        );
+        assert!(
+            trace
+                .events
+                .iter()
+                .any(|event| matches!(event, TraceEvent::GraphConsiderEdge { .. }))
+        );
+        assert!(
+            trace
+                .events
+                .iter()
+                .any(|event| matches!(event, TraceEvent::GraphSettle { .. }))
+        );
+        assert_valid_graph_trace(&trace);
+    }
+
+    #[test]
+    fn prefix_trie_rejects_empty_words() {
+        let error = trace_prefix_trie(SequenceInput {
+            text: String::new(),
+            pattern: String::new(),
+            words: vec!["tea".to_string(), String::new()],
+        })
+        .expect_err("invalid trie input");
+
+        assert!(error.message().contains("cannot be empty"));
+    }
+
+    #[test]
     fn levenshtein_trace_computes_edit_distance() {
         let trace = trace_levenshtein(SequenceInput {
             text: "kitten".to_string(),
             pattern: "sitting".to_string(),
+            words: Vec::new(),
         })
         .expect("trace");
 
@@ -5928,6 +6246,7 @@ mod tests {
         let error = trace_levenshtein(SequenceInput {
             text: "abc".to_string(),
             pattern: String::new(),
+            words: Vec::new(),
         })
         .expect_err("invalid sequence input");
 
@@ -5965,6 +6284,7 @@ mod tests {
             AlgorithmId::Kmp,
             AlgorithmId::BoyerMoore,
             AlgorithmId::Levenshtein,
+            AlgorithmId::PrefixTrie,
         ] {
             let trace = generate_trace(example_request(algorithm)).expect("trace");
             match algorithm {
@@ -5992,7 +6312,8 @@ mod tests {
                 | AlgorithmId::AStar
                 | AlgorithmId::PrimMst
                 | AlgorithmId::Kruskal
-                | AlgorithmId::TopologicalSort => assert_valid_graph_trace(&trace),
+                | AlgorithmId::TopologicalSort
+                | AlgorithmId::PrefixTrie => assert_valid_graph_trace(&trace),
                 AlgorithmId::Kmp | AlgorithmId::BoyerMoore | AlgorithmId::Levenshtein => {
                     assert_valid_sequence_trace(&trace)
                 }
@@ -6160,6 +6481,7 @@ mod tests {
                 | AlgorithmId::PrimMst
                 | AlgorithmId::Kruskal
                 | AlgorithmId::TopologicalSort
+                | AlgorithmId::PrefixTrie
         ));
         assert_eq!(trace.metadata.event_count, trace.events.len());
 

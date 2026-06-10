@@ -50,6 +50,9 @@ export function parseCustomInput(algorithm: AvailableAlgorithmId, raw: string): 
   if (algorithm === "levenshtein") {
     return { type: "sequence", value: parseEditDistanceInput(raw) };
   }
+  if (algorithm === "prefixTrie") {
+    return { type: "sequence", value: parsePrefixTrieInput(raw) };
+  }
   const graphInput = parseGraphInput(raw);
   if (algorithm === "topologicalSort") {
     validateDirectedAcyclicGraph(graphInput);
@@ -182,6 +185,33 @@ export function parseEditDistanceInput(raw: string): SequenceInput {
   }
 
   return { text, pattern };
+}
+
+export function parsePrefixTrieInput(raw: string): SequenceInput {
+  const parsed = readRecord(parseJson(raw));
+  const wordsRaw = parsed.words;
+
+  if (!Array.isArray(wordsRaw) || wordsRaw.length === 0) {
+    throw new InputValidationError("Prefix Tree input needs a non-empty words array.");
+  }
+  if (wordsRaw.length > 24) {
+    throw new InputValidationError("Prefix Tree supports up to 24 words.");
+  }
+
+  const words = wordsRaw.map((word, index) => {
+    if (typeof word !== "string") {
+      throw new InputValidationError(`Prefix Tree word at index ${index} must be a string.`);
+    }
+    if (word.trim() === "") {
+      throw new InputValidationError(`Prefix Tree word at index ${index} cannot be empty.`);
+    }
+    if (Array.from(word).length > 18) {
+      throw new InputValidationError(`Prefix Tree word at index ${index} supports up to 18 characters.`);
+    }
+    return word;
+  });
+
+  return { text: "", pattern: "", words };
 }
 
 function parseNode(value: unknown, index: number): GraphNode {

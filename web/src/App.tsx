@@ -17,7 +17,14 @@ import {
 } from "./data/catalog";
 import { customTemplate, exampleRequest } from "./data/examples";
 import { generateTrace } from "./lib/engine";
-import { randomDagInput, randomEditDistanceInput, randomGraphInput, randomSequenceInput, randomSortInput } from "./lib/random";
+import {
+  randomDagInput,
+  randomEditDistanceInput,
+  randomGraphInput,
+  randomSequenceInput,
+  randomSortInput,
+  randomTrieInput,
+} from "./lib/random";
 import { parseCustomInput } from "./lib/validators";
 import { drawTrace } from "./render/canvasRenderer";
 import type {
@@ -50,6 +57,7 @@ export default function App() {
   const [randomDag, setRandomDag] = useState<GraphInput>(() => randomDagInput(7));
   const [randomSequence, setRandomSequence] = useState<SequenceInput>(() => randomSequenceInput(32));
   const [randomEditDistance, setRandomEditDistance] = useState<SequenceInput>(() => randomEditDistanceInput(14));
+  const [randomTrie, setRandomTrie] = useState<SequenceInput>(() => randomTrieInput(10));
   const [customJson, setCustomJson] = useState<Record<AvailableAlgorithmId, string>>({
     quicksort: customTemplate("quicksort"),
     insertionSort: customTemplate("insertionSort"),
@@ -79,6 +87,7 @@ export default function App() {
     kmp: customTemplate("kmp"),
     boyerMoore: customTemplate("boyerMoore"),
     levenshtein: customTemplate("levenshtein"),
+    prefixTrie: customTemplate("prefixTrie"),
   });
   const [trace, setTrace] = useState<Trace | null>(null);
   const [inputError, setInputError] = useState<string | null>(null);
@@ -100,6 +109,7 @@ export default function App() {
         randomDag,
         randomSequence,
         randomEditDistance,
+        randomTrie,
         customJson[algorithm],
       );
       setInputError(null);
@@ -134,7 +144,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [algorithm, inputMode, randomSort, randomGraph, randomDag, randomSequence, randomEditDistance, customJson]);
+  }, [algorithm, inputMode, randomSort, randomGraph, randomDag, randomSequence, randomEditDistance, randomTrie, customJson]);
 
   useEffect(() => {
     if (!isPlaying || !trace) return;
@@ -162,6 +172,8 @@ export default function App() {
       setRandomSort(randomSortInput(sortSize));
     } else if (algorithm === "kmp" || algorithm === "boyerMoore") {
       setRandomSequence(randomSequenceInput(sequenceSize));
+    } else if (algorithm === "prefixTrie") {
+      setRandomTrie(randomTrieInput(sequenceSize));
     } else if (algorithm === "levenshtein") {
       setRandomEditDistance(randomEditDistanceInput(editSize));
     } else if (algorithm === "topologicalSort") {
@@ -311,15 +323,19 @@ export default function App() {
                   }}
                 />
               )}
-              {(algorithm === "kmp" || algorithm === "boyerMoore") && (
+              {(algorithm === "kmp" || algorithm === "boyerMoore" || algorithm === "prefixTrie") && (
                 <RangeControl
-                  label="Length"
-                  min={12}
-                  max={80}
+                  label={algorithm === "prefixTrie" ? "Words" : "Length"}
+                  min={algorithm === "prefixTrie" ? 4 : 12}
+                  max={algorithm === "prefixTrie" ? 16 : 80}
                   value={sequenceSize}
                   onChange={(value) => {
                     setSequenceSize(value);
-                    setRandomSequence(randomSequenceInput(value));
+                    if (algorithm === "prefixTrie") {
+                      setRandomTrie(randomTrieInput(value));
+                    } else {
+                      setRandomSequence(randomSequenceInput(value));
+                    }
                   }}
                 />
               )}
@@ -431,6 +447,7 @@ function buildRequest(
   randomDag: GraphInput,
   randomSequence: SequenceInput,
   randomEditDistance: SequenceInput,
+  randomTrie: SequenceInput,
   customJson: string,
 ): AlgorithmRequest {
   if (inputMode === "example") {
@@ -468,6 +485,14 @@ function buildRequest(
       algorithm,
       inputMode,
       input: { type: "sequence", value: randomEditDistance },
+      options: optionsForAlgorithm(algorithm),
+    };
+  }
+  if (algorithm === "prefixTrie") {
+    return {
+      algorithm,
+      inputMode,
+      input: { type: "sequence", value: randomTrie },
       options: optionsForAlgorithm(algorithm),
     };
   }
@@ -556,6 +581,9 @@ function optionsForAlgorithm(algorithm: AvailableAlgorithmId): AlgorithmRequest[
   if (algorithm === "levenshtein") {
     return { type: "levenshtein", value: {} };
   }
+  if (algorithm === "prefixTrie") {
+    return { type: "prefixTrie", value: {} };
+  }
   if (algorithm === "bfs") {
     return { type: "bfs", value: { stopAtTarget: true } };
   }
@@ -582,6 +610,7 @@ function optionsForAlgorithm(algorithm: AvailableAlgorithmId): AlgorithmRequest[
 
 function randomControlLabel(algorithm: AvailableAlgorithmId) {
   if (isSortAlgorithm(algorithm)) return "Values";
+  if (algorithm === "prefixTrie") return "Words";
   if (algorithm === "kmp" || algorithm === "boyerMoore" || algorithm === "levenshtein") return "Text";
   return "Nodes";
 }

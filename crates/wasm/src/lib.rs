@@ -43,6 +43,7 @@ pub fn example_request_for(algorithm: &str) -> Result<JsValue, JsValue> {
         "kmp" => AlgorithmId::Kmp,
         "boyerMoore" => AlgorithmId::BoyerMoore,
         "levenshtein" => AlgorithmId::Levenshtein,
+        "prefixTrie" => AlgorithmId::PrefixTrie,
         other => {
             return Err(JsValue::from_str(&format!(
                 "Unknown algorithm id '{other}'."

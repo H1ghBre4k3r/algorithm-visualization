@@ -127,6 +127,10 @@ export function generateTraceFallback(request: AlgorithmRequest): Trace {
     return traceLevenshtein(request.input.value);
   }
 
+  if (request.algorithm === "prefixTrie" && request.input.type === "sequence") {
+    return tracePrefixTrie(request.input.value);
+  }
+
   throw new Error("Algorithm and input type do not match.");
 }
 
@@ -3255,6 +3259,183 @@ function fullMatchShift(pattern: string[], lastOccurrence: Map<string, number>) 
   return lastIndex !== undefined && lastIndex < pattern.length - 1 ? pattern.length - 1 - lastIndex : 1;
 }
 
+interface TrieBuildNode {
+  id: string;
+  label: string;
+  depth: number;
+  terminal: boolean;
+  children: Map<string, number>;
+}
+
+function tracePrefixTrie(input: SequenceInput): Trace {
+  validatePrefixTrie(input);
+
+  const words = input.words ?? [];
+  const nodes: TrieBuildNode[] = [
+    {
+      id: "n0",
+      label: "root",
+      depth: 0,
+      terminal: false,
+      children: new Map(),
+    },
+  ];
+  const edges: GraphEdge[] = [];
+  const events: TraceEvent[] = [];
+  const terminalNodes: string[] = [];
+
+  for (const word of words) {
+    let current = 0;
+    events.push({
+      type: "graphVisit",
+      node: nodes[current].id,
+      distance: 0,
+      message: `Start inserting word '${word}' at the root.`,
+    });
+
+    for (const character of Array.from(word)) {
+      const existing = nodes[current].children.get(character);
+      if (existing !== undefined) {
+        const edgeId = trieEdgeId(nodes[current].id, nodes[existing].id);
+        events.push({
+          type: "graphConsiderEdge",
+          edgeId,
+          from: nodes[current].id,
+          to: nodes[existing].id,
+          weight: nodes[existing].depth,
+          message: `Follow existing edge '${character}' for '${word}'.`,
+        });
+        current = existing;
+        events.push({
+          type: "graphVisit",
+          node: nodes[current].id,
+          distance: nodes[current].depth,
+          message: `Move to prefix '${nodes[current].label}'.`,
+        });
+        continue;
+      }
+
+      const parent = current;
+      const next: TrieBuildNode = {
+        id: `n${nodes.length}`,
+        label: character,
+        depth: nodes[parent].depth + 1,
+        terminal: false,
+        children: new Map(),
+      };
+      const nextIndex = nodes.length;
+      nodes.push(next);
+      nodes[parent].children.set(character, nextIndex);
+      const edge: GraphEdge = {
+        id: trieEdgeId(nodes[parent].id, next.id),
+        from: nodes[parent].id,
+        to: next.id,
+        weight: 1,
+        label: character,
+        directed: true,
+      };
+      edges.push(edge);
+      events.push({
+        type: "graphSelectEdge",
+        edgeId: edge.id,
+        from: edge.from,
+        to: edge.to,
+        weight: 1,
+        totalWeight: edges.length,
+        message: `Create node '${next.label}' with edge '${character}'.`,
+      });
+      current = nextIndex;
+      events.push({
+        type: "graphVisit",
+        node: next.id,
+        distance: next.depth,
+        message: `Move to new prefix '${next.label}'.`,
+      });
+    }
+
+    nodes[current].terminal = true;
+    if (!terminalNodes.includes(nodes[current].id)) {
+      terminalNodes.push(nodes[current].id);
+    }
+    events.push({
+      type: "graphSettle",
+      node: nodes[current].id,
+      distance: nodes[current].depth,
+      message: `Mark '${word}' as a terminal word.`,
+    });
+  }
+
+  events.push({
+    type: "graphPath",
+    nodes: terminalNodes,
+    totalDistance: terminalNodes.length,
+    message: `Built trie for ${words.length} words with ${nodes.length} nodes.`,
+  });
+
+  const graphNodes = layoutTrieNodes(nodes);
+  const distances = nodes.map<NodeDistance>((node) => ({
+    node: node.id,
+    distance: node.depth,
+  }));
+
+  return {
+    algorithm: "prefixTrie",
+    initialState: {
+      type: "graph",
+      nodes: graphNodes,
+      edges,
+      source: "n0",
+      target: terminalNodes[terminalNodes.length - 1] ?? null,
+      distances,
+      path: [],
+    },
+    finalState: {
+      type: "graph",
+      nodes: graphNodes,
+      edges,
+      source: "n0",
+      target: terminalNodes[terminalNodes.length - 1] ?? null,
+      distances,
+      path: terminalNodes,
+    },
+    events,
+    metadata: {
+      algorithmName: "Prefix Tree",
+      category: "Sequence",
+      inputSize: words.length,
+      eventCount: events.length,
+      resultSummary: `Built ${nodes.length} trie nodes from ${words.length} words.`,
+    },
+  };
+}
+
+function trieEdgeId(from: string, to: string) {
+  return `${from}-${to}`;
+}
+
+function layoutTrieNodes(nodes: TrieBuildNode[]) {
+  const levels = new Map<number, TrieBuildNode[]>();
+  for (const node of nodes) {
+    const level = levels.get(node.depth) ?? [];
+    level.push(node);
+    levels.set(node.depth, level);
+  }
+
+  const maxDepth = Math.max(...nodes.map((node) => node.depth), 1);
+  return nodes.map((node) => {
+    const level = levels.get(node.depth) ?? [node];
+    const index = level.findIndex((candidate) => candidate.id === node.id);
+    const x = (index + 1) / (level.length + 1);
+    const y = 0.12 + (node.depth / maxDepth) * 0.76;
+    return {
+      id: node.id,
+      label: node.terminal ? `${node.label}*` : node.label,
+      x,
+      y,
+    };
+  });
+}
+
 interface AdjacentEdge {
   edgeId: string;
   to: string;
@@ -3508,6 +3689,26 @@ function validateBoyerMooreSequence(input: SequenceInput) {
   }
   if (patternLength > 48) {
     throw new Error("Boyer-Moore pattern is capped at 48 characters for interactive playback.");
+  }
+}
+
+function validatePrefixTrie(input: SequenceInput) {
+  const words = input.words ?? [];
+
+  if (words.length === 0) {
+    throw new Error("Prefix Tree words cannot be empty.");
+  }
+  if (words.length > 24) {
+    throw new Error("Prefix Tree is capped at 24 words for interactive playback.");
+  }
+
+  for (const [index, word] of words.entries()) {
+    if (word.trim() === "") {
+      throw new Error(`Prefix Tree word at index ${index} cannot be empty.`);
+    }
+    if (Array.from(word).length > 18) {
+      throw new Error(`Prefix Tree word at index ${index} is capped at 18 characters.`);
+    }
   }
 }
 

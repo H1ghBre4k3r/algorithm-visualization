@@ -68,7 +68,8 @@ export function drawTrace(canvas: HTMLCanvasElement, trace: Trace, step: number)
       trace.algorithm === "aStar" ||
       trace.algorithm === "primMst" ||
       trace.algorithm === "kruskal" ||
-      trace.algorithm === "topologicalSort") &&
+      trace.algorithm === "topologicalSort" ||
+      trace.algorithm === "prefixTrie") &&
     trace.initialState.type === "graph"
   ) {
     drawGraphTrace(context, width, height, trace, step);
@@ -348,7 +349,7 @@ function drawEdge(
   context.font = "12px Inter, system-ui, sans-serif";
   context.textAlign = "center";
   context.textBaseline = "middle";
-  const text = String(edge.weight);
+  const text = edge.label ?? String(edge.weight);
   const metrics = context.measureText(text);
   context.fillStyle = "rgba(255, 255, 255, 0.88)";
   roundedRect(context, labelX - metrics.width / 2 - 7, labelY - 11, metrics.width + 14, 22, 5);

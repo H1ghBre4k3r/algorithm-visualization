@@ -26,9 +26,9 @@ export type AvailableAlgorithmId =
   | "topologicalSort"
   | "kmp"
   | "boyerMoore"
-  | "levenshtein";
+  | "levenshtein"
+  | "prefixTrie";
 export type PlannedAlgorithmId =
-  | "prefixTrie"
   | "handshake"
   | "timeSync"
   | "paxos";
@@ -75,7 +75,8 @@ export type AlgorithmOptions =
   | { type: "topologicalSort"; value: TopologicalSortOptions }
   | { type: "kmp"; value: KmpOptions }
   | { type: "boyerMoore"; value: BoyerMooreOptions }
-  | { type: "levenshtein"; value: LevenshteinOptions };
+  | { type: "levenshtein"; value: LevenshteinOptions }
+  | { type: "prefixTrie"; value: PrefixTrieOptions };
 
 export interface QuicksortOptions {
   pivotStrategy: "last";
@@ -120,6 +121,7 @@ export type TopologicalSortOptions = Record<string, never>;
 export type KmpOptions = Record<string, never>;
 export type BoyerMooreOptions = Record<string, never>;
 export type LevenshteinOptions = Record<string, never>;
+export type PrefixTrieOptions = Record<string, never>;
 
 export interface SortInput {
   values: number[];
@@ -145,12 +147,14 @@ export interface GraphEdge {
   from: string;
   to: string;
   weight: number;
+  label?: string | null;
   directed?: boolean;
 }
 
 export interface SequenceInput {
   text: string;
   pattern: string;
+  words?: string[];
 }
 
 export interface Trace {

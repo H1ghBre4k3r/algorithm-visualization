@@ -67,4 +67,5 @@ Reference: https://impeccable.style
   - Prefix table focus: violet.
   - Dynamic-programming active cell: blue.
   - Edit operation costs: amber/red/violet for insertion, deletion, and substitution.
+  - Trie construction: amber character edges, blue active prefix depth, green terminal words.
   - Final matches: green.

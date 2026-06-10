@@ -6,6 +6,7 @@ import {
   parseEditDistanceInput,
   parseGraphInput,
   parseKmpInput,
+  parsePrefixTrieInput,
   parseSortInput,
 } from "./validators";
 
@@ -241,5 +242,30 @@ describe("parseEditDistanceInput", () => {
       text: "abc",
       pattern: "abcd",
     });
+  });
+});
+
+describe("parsePrefixTrieInput", () => {
+  it("accepts a words array", () => {
+    expect(parsePrefixTrieInput('{"words":["tea","team","ted"]}')).toEqual({
+      text: "",
+      pattern: "",
+      words: ["tea", "team", "ted"],
+    });
+  });
+
+  it("routes Prefix Tree custom input through the sequence parser", () => {
+    expect(parseCustomInput("prefixTrie", '{"words":["car","card","care"]}')).toEqual({
+      type: "sequence",
+      value: { text: "", pattern: "", words: ["car", "card", "care"] },
+    });
+  });
+
+  it("rejects empty word lists", () => {
+    expect(() => parsePrefixTrieInput('{"words":[]}')).toThrow("non-empty words");
+  });
+
+  it("rejects empty words", () => {
+    expect(() => parsePrefixTrieInput('{"words":["tea",""]}')).toThrow("cannot be empty");
   });
 });

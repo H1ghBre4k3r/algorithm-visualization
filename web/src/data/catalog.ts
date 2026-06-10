@@ -250,7 +250,7 @@ export const algorithms: AlgorithmCatalogItem[] = [
     id: "prefixTrie",
     label: "Prefix Tree",
     category: "sequence",
-    status: "planned",
+    status: "available",
     summary: "Insert strings into a shared-prefix trie structure.",
   },
   {

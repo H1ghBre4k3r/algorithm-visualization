@@ -136,3 +136,31 @@ export function randomEditDistanceInput(size: number): SequenceInput {
     pattern: build(targetLength),
   };
 }
+
+export function randomTrieInput(size: number): SequenceInput {
+  const families = [
+    ["tea", "team", "teal", "ted", "ten", "tent", "to", "ton"],
+    ["car", "card", "care", "cart", "cat", "cater", "can", "cane"],
+    ["star", "start", "stare", "stack", "stamp", "stay", "stone", "store"],
+    ["flow", "flower", "flown", "flight", "flint", "flip", "fleet", "flee"],
+  ];
+  const family = families[Math.floor(Math.random() * families.length)];
+  const wordCount = Math.max(4, Math.min(16, size));
+  const shuffled = [...family].sort(() => Math.random() - 0.5);
+  const words = shuffled.slice(0, Math.min(wordCount, family.length));
+
+  while (words.length < wordCount) {
+    const stem = family[Math.floor(Math.random() * family.length)];
+    const suffix = String.fromCharCode(97 + Math.floor(Math.random() * 26));
+    const candidate = `${stem}${suffix}`;
+    if (!words.includes(candidate)) {
+      words.push(candidate);
+    }
+  }
+
+  return {
+    text: "",
+    pattern: "",
+    words,
+  };
+}
