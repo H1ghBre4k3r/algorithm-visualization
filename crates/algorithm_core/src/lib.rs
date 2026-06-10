@@ -31,6 +31,7 @@ pub enum AlgorithmId {
     PrimMst,
     Kruskal,
     TopologicalSort,
+    TarjanScc,
     Kmp,
     BoyerMoore,
     Levenshtein,
@@ -95,6 +96,7 @@ pub enum AlgorithmOptions {
     PrimMst(PrimMstOptions),
     Kruskal(KruskalOptions),
     TopologicalSort(TopologicalSortOptions),
+    TarjanScc(TarjanSccOptions),
     Kmp(KmpOptions),
     BoyerMoore(BoyerMooreOptions),
     Levenshtein(LevenshteinOptions),
@@ -226,6 +228,10 @@ pub struct KruskalOptions {}
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct TopologicalSortOptions {}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct TarjanSccOptions {}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
@@ -639,6 +645,7 @@ pub fn generate_trace(request: AlgorithmRequest) -> Result<Trace, AlgorithmError
         (AlgorithmId::PrimMst, InputData::Graph(input)) => trace_prim_mst(input),
         (AlgorithmId::Kruskal, InputData::Graph(input)) => trace_kruskal(input),
         (AlgorithmId::TopologicalSort, InputData::Graph(input)) => trace_topological_sort(input),
+        (AlgorithmId::TarjanScc, InputData::Graph(input)) => trace_tarjan_scc(input),
         (AlgorithmId::Kmp, InputData::Sequence(input)) => trace_kmp(input),
         (AlgorithmId::BoyerMoore, InputData::Sequence(input)) => trace_boyer_moore(input),
         (AlgorithmId::Levenshtein, InputData::Sequence(input)) => trace_levenshtein(input),
@@ -720,6 +727,9 @@ pub fn generate_trace(request: AlgorithmRequest) -> Result<Trace, AlgorithmError
         )),
         (AlgorithmId::TopologicalSort, _) => Err(AlgorithmError::new(
             "Topological Sort requires directed graph input with nodes and edges.",
+        )),
+        (AlgorithmId::TarjanScc, _) => Err(AlgorithmError::new(
+            "Tarjan SCC requires directed graph input with nodes and edges.",
         )),
         (AlgorithmId::Kmp, _) => Err(AlgorithmError::new(
             "Knuth-Morris-Pratt requires sequence input with text and pattern.",
@@ -967,6 +977,12 @@ pub fn example_request(algorithm: AlgorithmId) -> AlgorithmRequest {
             options: Some(AlgorithmOptions::TopologicalSort(
                 TopologicalSortOptions::default(),
             )),
+        },
+        AlgorithmId::TarjanScc => AlgorithmRequest {
+            algorithm,
+            input_mode: InputMode::Example,
+            input: InputData::Graph(example_scc_graph()),
+            options: Some(AlgorithmOptions::TarjanScc(TarjanSccOptions::default())),
         },
         AlgorithmId::Kmp => AlgorithmRequest {
             algorithm,
@@ -4242,6 +4258,221 @@ pub fn trace_topological_sort(input: GraphInput) -> Result<Trace, AlgorithmError
     })
 }
 
+pub fn trace_tarjan_scc(input: GraphInput) -> Result<Trace, AlgorithmError> {
+    validate_graph(&input)?;
+    validate_directed_graph(&input, "Tarjan SCC")?;
+
+    let node_order = input
+        .nodes
+        .iter()
+        .map(|node| node.id.clone())
+        .collect::<Vec<_>>();
+    let mut outgoing = node_order
+        .iter()
+        .map(|node| (node.clone(), Vec::<GraphEdge>::new()))
+        .collect::<HashMap<_, _>>();
+    for edge in &input.edges {
+        outgoing
+            .get_mut(&edge.from)
+            .expect("edge endpoints were validated")
+            .push(edge.clone());
+    }
+
+    let mut events = Vec::new();
+    let mut index = 0_u32;
+    let mut stack = Vec::<String>::new();
+    let mut on_stack = HashSet::<String>::new();
+    let mut indices = HashMap::<String, u32>::new();
+    let mut lowlink = HashMap::<String, u32>::new();
+    let mut components = Vec::<Vec<String>>::new();
+    let mut component_index = HashMap::<String, u32>::new();
+
+    struct TarjanCtx<'a> {
+        outgoing: &'a HashMap<String, Vec<GraphEdge>>,
+        index: &'a mut u32,
+        stack: &'a mut Vec<String>,
+        on_stack: &'a mut HashSet<String>,
+        indices: &'a mut HashMap<String, u32>,
+        lowlink: &'a mut HashMap<String, u32>,
+        components: &'a mut Vec<Vec<String>>,
+        component_index: &'a mut HashMap<String, u32>,
+        events: &'a mut Vec<TraceEvent>,
+    }
+
+    fn strong_connect(node: &str, ctx: &mut TarjanCtx<'_>) {
+        let node_index = *ctx.index;
+        *ctx.index += 1;
+        ctx.indices.insert(node.to_string(), node_index);
+        ctx.lowlink.insert(node.to_string(), node_index);
+        ctx.stack.push(node.to_string());
+        ctx.on_stack.insert(node.to_string());
+        ctx.events.push(TraceEvent::GraphVisit {
+            node: node.to_string(),
+            distance: node_index + 1,
+            message: format!("Discover {node} with index {}.", node_index + 1),
+        });
+
+        for edge in ctx.outgoing.get(node).cloned().unwrap_or_default() {
+            ctx.events.push(TraceEvent::GraphConsiderEdge {
+                edge_id: edge.id.clone(),
+                from: edge.from.clone(),
+                to: edge.to.clone(),
+                weight: edge.weight,
+                message: format!(
+                    "Follow directed edge {} from {} to {}.",
+                    edge.id, edge.from, edge.to
+                ),
+            });
+
+            if !ctx.indices.contains_key(&edge.to) {
+                strong_connect(&edge.to, ctx);
+                let previous = *ctx.lowlink.get(node).unwrap_or(&node_index);
+                let child_low = *ctx.lowlink.get(&edge.to).unwrap_or(&previous);
+                let next = previous.min(child_low);
+                ctx.lowlink.insert(node.to_string(), next);
+                ctx.events.push(TraceEvent::GraphRelaxEdge {
+                    edge_id: edge.id.clone(),
+                    from: edge.from.clone(),
+                    to: edge.to.clone(),
+                    weight: edge.weight,
+                    previous_distance: Some(previous + 1),
+                    new_distance: Some(next + 1),
+                    improved: next < previous,
+                    message: format!(
+                        "Update low-link for {node} from {} to {} after visiting {}.",
+                        previous + 1,
+                        next + 1,
+                        edge.to
+                    ),
+                });
+            } else if ctx.on_stack.contains(&edge.to) {
+                let previous = *ctx.lowlink.get(node).unwrap_or(&node_index);
+                let target_index = *ctx.indices.get(&edge.to).unwrap_or(&previous);
+                let next = previous.min(target_index);
+                ctx.lowlink.insert(node.to_string(), next);
+                ctx.events.push(TraceEvent::GraphRelaxEdge {
+                    edge_id: edge.id.clone(),
+                    from: edge.from.clone(),
+                    to: edge.to.clone(),
+                    weight: edge.weight,
+                    previous_distance: Some(previous + 1),
+                    new_distance: Some(next + 1),
+                    improved: next < previous,
+                    message: format!(
+                        "Back edge to {} lowers {node}'s low-link from {} to {}.",
+                        edge.to,
+                        previous + 1,
+                        next + 1
+                    ),
+                });
+            }
+        }
+
+        if ctx.lowlink.get(node) == ctx.indices.get(node) {
+            let mut component = Vec::new();
+            while let Some(member) = ctx.stack.pop() {
+                ctx.on_stack.remove(&member);
+                component.push(member.clone());
+                let component_number = ctx.components.len() as u32 + 1;
+                ctx.component_index.insert(member.clone(), component_number);
+                ctx.events.push(TraceEvent::GraphSettle {
+                    node: member.clone(),
+                    distance: component_number,
+                    message: format!("{member} closes into component {component_number}."),
+                });
+                if member == node {
+                    break;
+                }
+            }
+            component.sort();
+            ctx.events.push(TraceEvent::GraphPath {
+                nodes: component.clone(),
+                total_distance: Some(component.len() as u32),
+                message: format!(
+                    "Component {}: {}.",
+                    ctx.components.len() + 1,
+                    component.join(", ")
+                ),
+            });
+            ctx.components.push(component);
+        }
+    }
+
+    for node in &node_order {
+        if !indices.contains_key(node) {
+            let mut ctx = TarjanCtx {
+                outgoing: &outgoing,
+                index: &mut index,
+                stack: &mut stack,
+                on_stack: &mut on_stack,
+                indices: &mut indices,
+                lowlink: &mut lowlink,
+                components: &mut components,
+                component_index: &mut component_index,
+                events: &mut events,
+            };
+            strong_connect(node, &mut ctx);
+        }
+    }
+
+    let initial_distances = node_order
+        .iter()
+        .map(|node| NodeDistance {
+            node: node.clone(),
+            distance: None,
+        })
+        .collect::<Vec<_>>();
+    let final_distances = node_order
+        .iter()
+        .map(|node| NodeDistance {
+            node: node.clone(),
+            distance: component_index.get(node).copied(),
+        })
+        .collect::<Vec<_>>();
+    let flattened = components
+        .iter()
+        .flat_map(|component| component.iter().cloned())
+        .collect::<Vec<_>>();
+    let component_summary = components
+        .iter()
+        .map(|component| format!("{{{}}}", component.join(", ")))
+        .collect::<Vec<_>>()
+        .join(" ");
+
+    let metadata = TraceMetadata {
+        algorithm_name: "Tarjan SCC".to_string(),
+        category: "Graph".to_string(),
+        input_size: input.nodes.len(),
+        event_count: events.len(),
+        result_summary: format!(
+            "Found {} components: {component_summary}.",
+            components.len()
+        ),
+    };
+
+    Ok(Trace {
+        algorithm: AlgorithmId::TarjanScc,
+        initial_state: VisualizationState::Graph {
+            nodes: input.nodes.clone(),
+            edges: input.edges.clone(),
+            source: input.source.clone(),
+            target: input.target.clone(),
+            distances: initial_distances,
+            path: Vec::new(),
+        },
+        final_state: VisualizationState::Graph {
+            nodes: input.nodes,
+            edges: input.edges,
+            source: input.source,
+            target: input.target,
+            distances: final_distances,
+            path: flattened,
+        },
+        events,
+        metadata,
+    })
+}
+
 pub fn trace_kmp(input: SequenceInput) -> Result<Trace, AlgorithmError> {
     validate_sequence(&input)?;
 
@@ -5761,19 +5992,23 @@ fn validate_mst_graph(input: &GraphInput) -> Result<(), AlgorithmError> {
     Ok(())
 }
 
-fn validate_topological_graph(input: &GraphInput) -> Result<(), AlgorithmError> {
+fn validate_directed_graph(input: &GraphInput, algorithm_name: &str) -> Result<(), AlgorithmError> {
     if input.edges.is_empty() {
-        return Err(AlgorithmError::new(
-            "Topological Sort requires at least one directed edge.",
-        ));
+        return Err(AlgorithmError::new(format!(
+            "{algorithm_name} requires at least one directed edge."
+        )));
     }
     if let Some(edge) = input.edges.iter().find(|edge| !edge.directed) {
         return Err(AlgorithmError::new(format!(
-            "Topological Sort requires directed edges; edge '{}' is undirected.",
+            "{algorithm_name} requires directed edges; edge '{}' is undirected.",
             edge.id
         )));
     }
     Ok(())
+}
+
+fn validate_topological_graph(input: &GraphInput) -> Result<(), AlgorithmError> {
+    validate_directed_graph(input, "Topological Sort")
 }
 
 struct UnionFind {
@@ -5969,6 +6204,60 @@ fn example_dag() -> GraphInput {
         ],
         source: "A".to_string(),
         target: Some("F".to_string()),
+    }
+}
+
+fn example_scc_graph() -> GraphInput {
+    GraphInput {
+        nodes: vec![
+            GraphNode {
+                id: "A".to_string(),
+                label: "A".to_string(),
+                x: 0.16,
+                y: 0.32,
+            },
+            GraphNode {
+                id: "B".to_string(),
+                label: "B".to_string(),
+                x: 0.36,
+                y: 0.18,
+            },
+            GraphNode {
+                id: "C".to_string(),
+                label: "C".to_string(),
+                x: 0.34,
+                y: 0.48,
+            },
+            GraphNode {
+                id: "D".to_string(),
+                label: "D".to_string(),
+                x: 0.62,
+                y: 0.28,
+            },
+            GraphNode {
+                id: "E".to_string(),
+                label: "E".to_string(),
+                x: 0.82,
+                y: 0.44,
+            },
+            GraphNode {
+                id: "F".to_string(),
+                label: "F".to_string(),
+                x: 0.62,
+                y: 0.72,
+            },
+        ],
+        edges: vec![
+            directed_edge("AB", "A", "B", 1),
+            directed_edge("BC", "B", "C", 1),
+            directed_edge("CA", "C", "A", 1),
+            directed_edge("CD", "C", "D", 1),
+            directed_edge("DE", "D", "E", 1),
+            directed_edge("ED", "E", "D", 1),
+            directed_edge("EF", "E", "F", 1),
+        ],
+        source: "A".to_string(),
+        target: None,
     }
 }
 
@@ -7490,6 +7779,7 @@ mod tests {
             AlgorithmId::PrimMst,
             AlgorithmId::Kruskal,
             AlgorithmId::TopologicalSort,
+            AlgorithmId::TarjanScc,
             AlgorithmId::Kmp,
             AlgorithmId::BoyerMoore,
             AlgorithmId::Levenshtein,
@@ -7525,6 +7815,7 @@ mod tests {
                 | AlgorithmId::PrimMst
                 | AlgorithmId::Kruskal
                 | AlgorithmId::TopologicalSort
+                | AlgorithmId::TarjanScc
                 | AlgorithmId::PrefixTrie => assert_valid_graph_trace(&trace),
                 AlgorithmId::Kmp | AlgorithmId::BoyerMoore | AlgorithmId::Levenshtein => {
                     assert_valid_sequence_trace(&trace)
@@ -7696,6 +7987,7 @@ mod tests {
                 | AlgorithmId::PrimMst
                 | AlgorithmId::Kruskal
                 | AlgorithmId::TopologicalSort
+                | AlgorithmId::TarjanScc
                 | AlgorithmId::PrefixTrie
         ));
         assert_eq!(trace.metadata.event_count, trace.events.len());
