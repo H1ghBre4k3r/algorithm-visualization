@@ -20,8 +20,8 @@ const palette = {
 
 export function drawTrace(canvas: HTMLCanvasElement, trace: Trace, step: number) {
   const rect = canvas.getBoundingClientRect();
-  const width = Math.max(320, Math.floor(rect.width));
-  const height = Math.max(260, Math.floor(rect.height));
+  const width = Math.max(1, Math.floor(rect.width));
+  const height = Math.max(1, Math.floor(rect.height));
   const dpr = window.devicePixelRatio || 1;
 
   if (canvas.width !== Math.floor(width * dpr) || canvas.height !== Math.floor(height * dpr)) {
@@ -121,15 +121,16 @@ function drawSortTrace(
 ) {
   const frame = deriveSortFrame(trace, step);
   const values = frame.values;
-  const paddingX = 40;
-  const paddingY = 42;
+  const paddingX = Math.max(18, Math.min(40, width * 0.1));
+  const paddingY = Math.max(30, Math.min(42, height * 0.12));
   const chartWidth = width - paddingX * 2;
   const chartHeight = height - paddingY * 2;
   const maxValue = Math.max(1, ...values);
   const minValue = Math.min(0, ...values);
   const range = Math.max(1, maxValue - minValue);
-  const gap = Math.max(3, Math.min(10, chartWidth / Math.max(12, values.length) / 5));
-  const barWidth = Math.max(6, (chartWidth - gap * (values.length - 1)) / Math.max(1, values.length));
+  const slotWidth = chartWidth / Math.max(1, values.length);
+  const gap = Math.max(1, Math.min(10, slotWidth * 0.18));
+  const barWidth = Math.max(1.5, (chartWidth - gap * (values.length - 1)) / Math.max(1, values.length));
 
   context.save();
   context.translate(paddingX, paddingY);
@@ -150,13 +151,15 @@ function drawSortTrace(
     const role = roleForSortIndex(index, frame);
 
     context.fillStyle = role;
-    roundedRect(context, x, y, barWidth, barHeight, 5);
+    roundedRect(context, x, y, barWidth, barHeight, Math.min(5, barWidth / 2));
     context.fill();
 
-    context.fillStyle = palette.ink;
-    context.font = barWidth > 22 ? "12px Inter, system-ui, sans-serif" : "10px Inter, system-ui, sans-serif";
-    context.textAlign = "center";
-    context.fillText(String(value), x + barWidth / 2, y - 8);
+    if (barWidth >= 10 && chartHeight >= 120) {
+      context.fillStyle = palette.ink;
+      context.font = barWidth > 22 ? "12px Inter, system-ui, sans-serif" : "10px Inter, system-ui, sans-serif";
+      context.textAlign = "center";
+      context.fillText(String(value), x + barWidth / 2, y - 8);
+    }
   });
 
   if (frame.boundary !== null) {

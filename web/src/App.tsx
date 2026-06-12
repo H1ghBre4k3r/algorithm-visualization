@@ -1,11 +1,13 @@
-import { useEffect, useRef, useState } from "react";
+import { type CSSProperties, useEffect, useRef, useState } from "react";
 import {
+  Maximize2,
   Pause,
   Play,
   RefreshCw,
   RotateCcw,
   Shuffle,
   SkipForward,
+  ZoomIn,
 } from "lucide-react";
 
 import {
@@ -47,6 +49,8 @@ const inputModes: Array<{ id: InputMode; label: string }> = [
   { id: "random", label: "Random" },
   { id: "custom", label: "Custom JSON" },
 ];
+
+type ViewportMode = "fit" | "detail";
 
 export default function App() {
   const [category, setCategory] = useState<CategoryId>("sorting");
@@ -107,6 +111,8 @@ export default function App() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [step, setStep] = useState(0);
   const [speed, setSpeed] = useState(7);
+  const [viewportMode, setViewportMode] = useState<ViewportMode>("fit");
+  const viewportRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -198,6 +204,14 @@ export default function App() {
   const activeAlgorithm = algorithms.find((item) => item.id === algorithm) ?? algorithms[0];
   const currentEvent = step > 0 ? (trace?.events[step - 1] ?? null) : null;
   const canPlay = Boolean(trace && trace.events.length > 0 && step < trace.events.length);
+  const canvasStyle = {
+    "--visual-canvas-width": trace ? canvasInlineSize(trace, viewportMode) : "100%",
+  } as CSSProperties;
+
+  useEffect(() => {
+    setViewportMode("fit");
+    viewportRef.current?.scrollTo({ left: 0, top: 0 });
+  }, [algorithm, inputMode, trace?.metadata.inputSize]);
   const graphControlInput =
     inputMode === "example" && isPathGraphAlgorithm(algorithm)
       ? exampleGraphInput
@@ -278,6 +292,18 @@ export default function App() {
     setInputError(null);
     setStep(0);
     setIsPlaying(false);
+  }
+
+  function changeViewportMode(nextMode: ViewportMode) {
+    setViewportMode(nextMode);
+    if (nextMode === "fit") {
+      requestAnimationFrame(() => viewportRef.current?.scrollTo({ left: 0, top: 0, behavior: "smooth" }));
+    }
+  }
+
+  function resetViewport() {
+    setViewportMode("fit");
+    requestAnimationFrame(() => viewportRef.current?.scrollTo({ left: 0, top: 0, behavior: "smooth" }));
   }
 
   return (
@@ -508,9 +534,40 @@ export default function App() {
         </aside>
 
         <section className="visual-area">
-          <div className="canvas-shell">
-            {trace && <VisualizationCanvas trace={trace} step={step} />}
-            {!trace && <div className="empty-state">{isLoading ? "Loading trace" : inputError ?? "No trace"}</div>}
+          <div className="visual-stage">
+            <div className="viewport-controls" aria-label="Visualization viewport controls">
+              <button
+                className={viewportMode === "fit" ? "active" : ""}
+                type="button"
+                title="Fit visualization"
+                aria-pressed={viewportMode === "fit"}
+                onClick={() => changeViewportMode("fit")}
+              >
+                <Maximize2 size={15} />
+                <span>Fit</span>
+              </button>
+              <button
+                className={viewportMode === "detail" ? "active" : ""}
+                type="button"
+                title="Inspect at detail scale"
+                aria-pressed={viewportMode === "detail"}
+                onClick={() => changeViewportMode("detail")}
+              >
+                <ZoomIn size={15} />
+                <span>1x</span>
+              </button>
+              <button type="button" title="Reset viewport" onClick={resetViewport}>
+                <RotateCcw size={15} />
+              </button>
+            </div>
+            <div
+              className={`canvas-shell ${viewportMode === "detail" ? "detail-mode" : "fit-mode"}`}
+              ref={viewportRef}
+              style={canvasStyle}
+            >
+              {trace && <VisualizationCanvas trace={trace} step={step} />}
+              {!trace && <div className="empty-state">{isLoading ? "Loading trace" : inputError ?? "No trace"}</div>}
+            </div>
           </div>
 
           <div className="inspector">
@@ -524,6 +581,27 @@ export default function App() {
       </main>
     </div>
   );
+}
+
+function canvasInlineSize(trace: Trace, viewportMode: ViewportMode) {
+  if (viewportMode === "fit") {
+    return "100%";
+  }
+
+  if (trace.initialState.type === "array") {
+    const itemCount = trace.initialState.values.length;
+    return `${Math.min(1800, Math.max(720, itemCount * 18 + 96))}px`;
+  }
+
+  if (trace.initialState.type === "distributed") {
+    return `${Math.min(1500, Math.max(860, trace.initialState.peers.length * 150))}px`;
+  }
+
+  if (trace.initialState.type === "sequence") {
+    return "960px";
+  }
+
+  return "860px";
 }
 
 function buildRequest(

@@ -15,6 +15,7 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
+  overflow-x: hidden;
 }
 
 button,
@@ -429,6 +430,40 @@ button:disabled {
   overflow: hidden;
 }
 
+.visual-stage {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 8px;
+}
+
+.viewport-controls {
+  min-width: 0;
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.viewport-controls button {
+  min-height: 34px;
+  padding: 0 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-radius: 8px;
+  color: #42526e;
+  background: #eef2f6;
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.viewport-controls button.active {
+  color: #ffffff;
+  background: #277da1;
+}
+
 .canvas-shell {
   width: 100%;
   height: min(calc(100vh - 220px), calc((100vw - 432px) * 0.58), 680px);
@@ -436,14 +471,24 @@ button:disabled {
   min-height: 300px;
   position: relative;
   overflow: hidden;
+  overscroll-behavior: contain;
+  touch-action: pan-x pan-y;
   border: 1px solid rgba(23, 32, 51, 0.12);
   border-radius: 8px;
   background: #f6f8fb;
 }
 
+.canvas-shell.detail-mode {
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+
 .canvas-shell canvas {
   display: block;
-  width: 100%;
+  width: var(--visual-canvas-width, 100%);
+  min-width: 100%;
+  max-width: none;
   height: 100%;
 }
 
@@ -551,6 +596,12 @@ button:disabled {
     overflow: visible;
   }
 
+  .viewport-controls {
+    justify-content: flex-start;
+    overflow-x: auto;
+    padding-bottom: 2px;
+  }
+
   .canvas-shell {
     height: clamp(320px, 58vh, 520px);
     min-height: 320px;
@@ -571,7 +622,7 @@ button:disabled {
   .app-shell {
     width: 100%;
     overflow-x: hidden;
-    padding-bottom: 164px;
+    padding-bottom: calc(176px + env(safe-area-inset-bottom));
   }
 
   .topbar,
@@ -685,7 +736,7 @@ button:disabled {
     right: 0;
     bottom: 0;
     z-index: 3;
-    padding: 10px 12px;
+    padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
     border-top: 1px solid rgba(23, 32, 51, 0.12);
     box-shadow: 0 -8px 18px rgba(23, 32, 51, 0.08);
   }
@@ -738,12 +789,25 @@ button:disabled {
   .visual-area {
     padding-top: 12px;
     gap: 10px;
+    overflow-x: hidden;
+  }
+
+  .visual-stage {
+    width: 100%;
+    overflow: hidden;
+  }
+
+  .viewport-controls button {
+    min-height: 38px;
+    padding: 0 9px;
   }
 
   .canvas-shell {
-    height: 44vh;
-    min-height: 300px;
-    max-height: 350px;
+    width: 100%;
+    max-width: 100%;
+    height: clamp(240px, 38vh, 320px);
+    min-height: 240px;
+    max-height: 320px;
   }
 
   .inspector {
